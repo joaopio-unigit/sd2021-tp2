@@ -98,7 +98,7 @@ public interface RestUsers {
 	 * 		   400 if the userId is null
 	 */
 	@GET
-	@Path("/{userId}/verify")
+	@Path("/{userId}" + VERIFYUSER)
 	@Produces(MediaType.APPLICATION_JSON)
 	void hasUser(@PathParam("userId") String userId);
 	

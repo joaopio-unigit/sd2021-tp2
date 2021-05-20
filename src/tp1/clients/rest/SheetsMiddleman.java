@@ -26,6 +26,13 @@ public class SheetsMiddleman {
 	private final static String REQUEST = "Making a request to " ;
 	private final static String TIMEOUT = "Connection timeout!!";
 	private final static String RETRY_CONNECTION = "Retrying to connect.";
+	
+	private static final String GOOGLE_SHEETS_API_KEY = "AIzaSyDan0PpAHPQh0eEQ2NDc6qf1QxdzOzWVsg";
+	private static final String GOOGLE_SHEETS_PATH = "https://sheets.googleapis.com/v4/spreadsheets/";
+	private static final String VALUES = "/values";
+	private static final String KEY_PARAM = "key";
+	private static final String GOOGLE_APIS = "googleapis";
+	private static final int SHEETID_POS = 3;
 
 	private URI sheetsServerURI;
 	private WebTarget target;
@@ -47,8 +54,12 @@ public class SheetsMiddleman {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 
 		Client client = createClient();
-
-		WebTarget localTarget = client.target(sheetURL).path(userId).path(range); // BUILDING THE PATH
+		
+		WebTarget localTarget;
+		//if(sheetURL.contains(GOOGLE_APIS))																			//DUVIDA - O RESTO FUNCIONA SEM PROBLEMAS???
+		//	localTarget = getGoogleTarget(sheetURL, client, range);
+		//else
+			localTarget = client.target(sheetURL).path(userId).path(range); // BUILDING THE PATH
 
 		System.out.println(REQUEST + localTarget.getUri().toString());
 
@@ -127,5 +138,14 @@ public class SheetsMiddleman {
 			ie.printStackTrace();
 		}
 		System.out.println(RETRY_CONNECTION);
+	}
+
+	//GOOGLE
+	
+	private WebTarget getGoogleTarget(String sheetURL, Client client, String range) {
+		String sheetId = sheetURL.split("/")[SHEETID_POS];
+		
+		return client.target(GOOGLE_SHEETS_PATH).path(sheetId).path(VALUES).path(range).queryParam(KEY_PARAM, GOOGLE_SHEETS_API_KEY);
+
 	}
 }
