@@ -29,10 +29,12 @@ public class ReplicationSpreadsheetsServer {
 	public static String spreadsheetsDomain;
 	public static Discovery sheetsDiscovery;
 	public static String serverURL;
+	public static String serverSecret;
 	
 	public static void main(String[] args) {
 		
 		spreadsheetsDomain =  args.length > 0 ? args[0] : "?";
+		serverSecret =  args.length > 0 ? args[1] : "?";
 				
 		try {		
 		String ip = InetAddress.getLocalHost().getHostAddress();

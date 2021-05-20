@@ -73,7 +73,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
 
-		if (!usersM.hasUser(sheetOwner)) {
+		if (!usersM.hasUser(sheetOwner, DropboxSpreadsheetsServer.serverSecret)) {
 			Log.info("User does not exist.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
@@ -132,8 +132,12 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 
 		checkValidUserId(userId);
 
+		System.out.println("USERID VALIDO");
+		
 		checkUserPassword(userId, password);
 
+		System.out.println("PASSWORD CORRETA");
+		
 		Spreadsheet sheet;
 
 		String sheetOwner = sheetId.split(SHEET_ID_DELIMITER)[0];
@@ -478,7 +482,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	private void checkValidUserId(String userId) {
-		if (!usersM.hasUser(userId)) {
+		if (!usersM.hasUser(userId, DropboxSpreadsheetsServer.serverSecret)) {
 			Log.info("UserId invalid.");
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}

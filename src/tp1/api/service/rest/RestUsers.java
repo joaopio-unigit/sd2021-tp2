@@ -100,6 +100,6 @@ public interface RestUsers {
 	@GET
 	@Path("/{userId}" + VERIFYUSER)
 	@Produces(MediaType.APPLICATION_JSON)
-	void hasUser(@PathParam("userId") String userId);
+	void hasUser(@PathParam("userId") String userId, @QueryParam("secret") String secret);
 	
 }

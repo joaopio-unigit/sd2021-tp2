@@ -42,14 +42,21 @@ public class UsersMiddleman {
 		return usersServerURI;
 	}
 
-	public boolean hasUser(String userID) {
+	public boolean hasUser(String userID, String secret) {
 
-		Response r = getMessage(target.path(userID).path(RestUsers.VERIFYUSER));
+		System.out.println("A PERGUNTAR SE O UTILIZADOR EXISTE");
+		WebTarget localTarget = target.path(userID).path(RestUsers.VERIFYUSER).queryParam("secret", secret);
+		Response r = getMessage(localTarget);
 
+		System.out.println("FIZ A PERGUNTA " + r.getStatus() + "URL: " + localTarget.getUri());
+		
 		if (r.getStatus() == Status.NOT_FOUND.getStatusCode()) {
+			System.out.println("DEU QUE NAO EXISTE");
 			return false;
-		} else
+		} else {
+			System.out.println("DEU QUE EXISTE");
 			return true;
+		}
 	}
 
 	public boolean checkPassword(String sheetOwner, String password) {

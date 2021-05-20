@@ -14,8 +14,6 @@ import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
 import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
 
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.WebApplicationException;
@@ -69,7 +67,6 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 		startZookeeper();
 	}
 	
-
 	@Override
 	public String createSpreadsheet(Spreadsheet sheet, String password) {
 		Log.info("createSpreadsheet : " + sheet + "; pwd = " + password);
@@ -84,7 +81,7 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
 
-		if (!usersM.hasUser(sheetOwner)) {
+		if (!usersM.hasUser(sheetOwner, ReplicationSpreadsheetsServer.serverSecret)) {
 			Log.info("User does not exist.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
@@ -484,7 +481,7 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	private void checkValidUserId(String userId) {
-		if (!usersM.hasUser(userId)) {
+		if (!usersM.hasUser(userId, ReplicationSpreadsheetsServer.serverSecret)) {
 			Log.info("UserId invalid.");
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
@@ -528,19 +525,6 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 		znodePath  = zk.write(serverZNode, CreateMode.EPHEMERAL_SEQUENTIAL);
 		System.out.println("Created child znode: " + znodePath);
 		
-		exec.execute(() -> startMonitoringZNODE(domainZNode));	
-	}
-
-	private void startMonitoringZNODE(String domainZNode) {
-		while(true) {
-			zk.getChildren( domainZNode, new Watcher() {
-				@Override
-				public void process(WatchedEvent event) {
-					List<String> lst = zk.getChildren( domainZNode, this);
-					lst.stream().forEach( e -> System.out.println(e));
-					System.out.println();
-				}
-			});
-		}
+		zk.getChildren(domainZNode, zk);
 	}
 }

@@ -58,7 +58,7 @@ public class ZookeeperProcessor implements Watcher {
 
 	@Override
 	public void process(WatchedEvent event) {
-		System.out.println( event);
+		System.out.println(event);
 	}
 	
 }

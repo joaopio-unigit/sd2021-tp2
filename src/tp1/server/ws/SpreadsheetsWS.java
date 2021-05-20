@@ -58,7 +58,6 @@ public class SpreadsheetsWS implements SoapSpreadsheets {
 		sheetsM = new SheetsMiddleman();
 
 		exec = Executors.newSingleThreadExecutor();
-		System.out.println("WS CRIADO COM SUCESSO");
 	}
 
 	@Override

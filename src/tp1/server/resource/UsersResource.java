@@ -174,8 +174,8 @@ public class UsersResource implements RestUsers {
 	}
 
 	@Override
-	public void hasUser(String userId) {
-		if (userId == null)
+	public void hasUser(String userId, String secret) {
+		if (userId == null || !secret.equals(UsersServer.serverSecret))
 			throw new WebApplicationException(Status.BAD_REQUEST);
 
 		synchronized (this) {

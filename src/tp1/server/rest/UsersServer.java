@@ -28,10 +28,17 @@ public class UsersServer {
 	public static final String SERVICE = "users";
 	public static String usersDomain;
 	public static Discovery usersDiscovery;
+	public static String serverSecret;
 	
 	public static void main(String[] args) {
 		
-		usersDomain = args.length > 0 ? args[0] : "?"; 
+		System.out.println("USERSERVER STARTING:");
+		
+		for(int i = 0; i < args.length; i++)
+			System.out.println("ARGUMENTO " + i + " : " + args[i]);
+		
+		usersDomain = args.length > 0 ? args[0] : "?";
+		serverSecret = args.length > 0 ? args[1] : "?";
 				
 		try {
 		String ip = InetAddress.getLocalHost().getHostAddress();

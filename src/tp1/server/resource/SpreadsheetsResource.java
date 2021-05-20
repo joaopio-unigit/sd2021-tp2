@@ -75,7 +75,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
 
-		if (!usersM.hasUser(sheetOwner)) {
+		if (!usersM.hasUser(sheetOwner, SpreadsheetsServer.serverSecret)) {
 			Log.info("User does not exist.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
@@ -474,7 +474,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	private void checkValidUserId(String userId) {
-		if (!usersM.hasUser(userId)) {
+		if (!usersM.hasUser(userId, SpreadsheetsServer.serverSecret)) {
 			Log.info("UserId invalid.");
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
