@@ -52,16 +52,16 @@ public class SheetsMiddleman {
 		return sheetsServerURI;
 	}
 
-	public String[][] getSpreadsheetValues(String sheetURL, String userId, String range, boolean rangeStoredInCache) {		
+	public String[][] getSpreadsheetValues(String sheetURL, String userId, String range, boolean rangeStoredInCache, String serverSecret) {		
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 
 		Client client = createClient();
 		
 		WebTarget localTarget;
-		//if(sheetURL.contains(GOOGLE_APIS))																			//DUVIDA - O RESTO FUNCIONA SEM PROBLEMAS???
+		//if(sheetURL.contains(GOOGLE_APIS))													//DUVIDA - O RESTO FUNCIONA SEM PROBLEMAS???
 		//	localTarget = getGoogleTarget(sheetURL, client, range);
 		//else
-			localTarget = client.target(sheetURL).path(userId).path(range); // BUILDING THE PATH
+			localTarget = client.target(sheetURL).path(userId).path(range).queryParam("secret", serverSecret); 		// BUILDING THE PATH
 
 		System.out.println(REQUEST + localTarget.getUri().toString());
 
@@ -92,14 +92,14 @@ public class SheetsMiddleman {
 		return rangeValues;
 	}
 
-	public void deleteUserSpreadsheets(String userId) {
+	public void deleteUserSpreadsheets(String userId, String serverSecret) {
 
 		int retries = 0;
 		boolean success = false;
 
 		while (!success && retries < MAX_RETRIES) {
 			try {
-				Response r = target.path(RestSpreadsheets.DELETESHEETS).path(userId).request()
+				Response r = target.path(RestSpreadsheets.DELETESHEETS).path(userId).queryParam("secret", serverSecret).request()
 						.accept(MediaType.APPLICATION_JSON).delete();
 
 				success = true;

@@ -156,7 +156,7 @@ public interface RestSpreadsheets {
 	 */
 	@DELETE
 	@Path(DELETESHEETS + "/{userId}")
-	void deleteUserSpreadsheets(@PathParam("userId") String userId);
+	void deleteUserSpreadsheets(@PathParam("userId") String userId, @QueryParam("secret") String secret);
 	
 	/**
 	 * Return the calculated imported values in some range
@@ -170,5 +170,6 @@ public interface RestSpreadsheets {
 	 */
 	@GET
 	@Path("/{sheetId}/{userId}/{range}")
-	String[][] importRange(@PathParam("sheetId") String sheetId, @PathParam("userId") String userId, @PathParam("range") String range);
+	String[][] importRange(@PathParam("sheetId") String sheetId, @PathParam("userId") String userId,
+			@PathParam("range") String range, @QueryParam("secret") String secret);
 }

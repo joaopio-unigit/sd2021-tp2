@@ -235,7 +235,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 				}
 
 				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-						rangeStoredInCache);
+						rangeStoredInCache, DropboxSpreadsheetsServer.serverSecret);
 
 				if (sheetValues != null) {
 
@@ -367,10 +367,10 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public void deleteUserSpreadsheets(String userId) {
+	public void deleteUserSpreadsheets(String userId, String secret) {
 		Log.info("deleteUserSpreadsheets : " + userId);
 
-		if (userId == null)
+		if (userId == null || !secret.equals(DropboxSpreadsheetsServer.serverSecret))
 			throw new WebApplicationException(Status.BAD_REQUEST);
 
 		if (!dropboxM.deleteSpreadsheet(userId, null)) {
@@ -380,9 +380,12 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range) {
+	public String[][] importRange(String sheetId, String userId, String range, String secret) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
+		if(!secret.equals(DropboxSpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
 		String sheetOwner = sheetId.split(SHEET_ID_DELIMITER)[0];
 		Spreadsheet sheet = dropboxM.getSpreadsheet(sheetOwner, sheetId);
 
@@ -421,7 +424,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 						String userIdDomain = sheet.getOwner() + "@" + DropboxSpreadsheetsServer.spreadsheetsDomain;
 
 						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-								CLIENT_DEFAULT_RETRIES);
+								CLIENT_DEFAULT_RETRIES, DropboxSpreadsheetsServer.serverSecret);
 
 						return sheetValues;
 					}

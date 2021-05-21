@@ -144,7 +144,7 @@ public class UsersResource implements RestUsers {
 		
 		
 		setSheetsMiddlemanURI();
-		sheetsM.deleteUserSpreadsheets(userId);
+		sheetsM.deleteUserSpreadsheets(userId, UsersServer.serverSecret);
 		
 		return storedUser;
 	}

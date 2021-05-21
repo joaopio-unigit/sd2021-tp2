@@ -1,6 +1,7 @@
 package tp1.server.resource;
 
 import java.net.URI;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,7 +37,8 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 	private final Map<String, Spreadsheet> spreadsheets;
 	private final Map<String, List<String>> owners;
 
-	private final Map<String, Map<String, String[][]>> cache;	// CACHE
+	private final Map<String, Map<String, String[][]>> cache; // CACHE
+	private final Map<String, Map<String, Timestamp>> ttls;	//CACHE
 	private ExecutorService exec; // CACHE
 
 	private static Logger Log = Logger.getLogger(SpreadsheetsResource.class.getName());
@@ -50,6 +52,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 		owners = new HashMap<String, List<String>>();
 
 		cache = new HashMap<String, Map<String, String[][]>>();	//CACHE
+		ttls = new HashMap<String, Map<String, Timestamp>>(); //CACHE
 		exec = Executors.newCachedThreadPool(); // CACHE
 
 		discovery = SpreadsheetsServer.sheetsDiscovery;
@@ -234,23 +237,44 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 				String userIdDomain = sheetOwner + "@" + SpreadsheetsServer.spreadsheetsDomain;
 
 				boolean rangeStoredInCache = false;
+				boolean validCachedRange = false;
 				
-				if(cache.get(sheetURL) != null){
-					if(cache.get(sheetURL).get(range) != null){
-							rangeStoredInCache = true;
-					}
-				}			
+				Timestamp currTimestamp = new Timestamp(System.currentTimeMillis());
 
-				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache);
+				if(ttls.get(sheetURL) != null) {
+					Timestamp rangeTTL = ttls.get(sheetURL).get(range); 
+					if(rangeTTL != null) {
+						rangeStoredInCache = true;
+						
+						if(rangeTTL.compareTo(currTimestamp) >= 0)
+							validCachedRange = true;
+					}
+				}		
 				
-				if(sheetValues != null) {
-					
-					exec.execute(()-> {insertNewValuesInCache(sheetURL, range, sheetValues);});
+				String[][] sheetValues;
+				
+				if(validCachedRange) {
+					//IR BUSCAR A CACHE OS VALORES E UTILIZAR
+					sheetValues = cache.get(sheetURL).get(range);
 				}
 				else {
-					Map<String, String[][]> cachedSheetValues = cache.get(sheetURL);
-					if(cachedSheetValues != null)
-						return cachedSheetValues.get(range);
+					//IR BUSCAR NOVOS VALORES
+					sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache, SpreadsheetsServer.serverSecret);
+				
+					//SE CONSEGUIU CONTACTAR O SERVIDOR
+					if(sheetValues != null) {
+						//GUARDA NOVOS VALORES EM CACHE
+						exec.execute(()-> {insertNewValuesInCache(sheetURL, range, sheetValues);});
+						//RETORNA OS NOVOS VALORES
+					}
+					else {
+						//VAI BUSCAR OS VALORES NAO VALIDOS
+						//SE HAVIA VALORES GUARDADOS EM CACHE
+						if(rangeStoredInCache)
+							return cache.get(sheetURL).get(range);
+						else
+							return null;
+					}
 				}
 				
 				return sheetValues;
@@ -361,10 +385,10 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public void deleteUserSpreadsheets(String userId) {
+	public void deleteUserSpreadsheets(String userId, String secret) {
 		Log.info("deleteUserSpreadsheets : " + userId);
 
-		if (userId == null)
+		if (userId == null || !secret.equals(SpreadsheetsServer.serverSecret))
 			throw new WebApplicationException(Status.BAD_REQUEST);
 
 		List<String> userIdSheets = owners.remove(userId);
@@ -375,9 +399,12 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range) {
+	public String[][] importRange(String sheetId, String userId, String range, String secret) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
+		if(!secret.equals(SpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
 		Spreadsheet sheet = spreadsheets.get(sheetId);
 
 		checkIfSheetExists(sheet);
@@ -414,7 +441,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 					public String[][] getRangeValues(String sheetURL, String range) {
 						String userIdDomain = sheet.getOwner() + "@" + SpreadsheetsServer.spreadsheetsDomain;
 
-						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, CLIENT_DEFAULT_RETRIES);
+						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, CLIENT_DEFAULT_RETRIES, SpreadsheetsServer.serverSecret);
 
 						return sheetValues;
 					}
@@ -471,6 +498,16 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 		sheetCachedRanges.put(range, newRangeValues);
 		
 		cache.put(sheetId, sheetCachedRanges);
+		
+		Map<String, Timestamp> sheetRangesTimestamps = ttls.get(sheetId);
+		if(sheetRangesTimestamps == null) {
+			sheetRangesTimestamps = new HashMap<String, Timestamp>();
+		}
+		
+		long validTime = 20000;
+		sheetRangesTimestamps.put(range, new Timestamp(System.currentTimeMillis() + validTime));
+		
+		ttls.put(sheetId, sheetRangesTimestamps);
 	}
 
 	private void checkValidUserId(String userId) {

@@ -44,17 +44,12 @@ public class UsersMiddleman {
 
 	public boolean hasUser(String userID, String secret) {
 
-		System.out.println("A PERGUNTAR SE O UTILIZADOR EXISTE");
 		WebTarget localTarget = target.path(userID).path(RestUsers.VERIFYUSER).queryParam("secret", secret);
 		Response r = getMessage(localTarget);
-
-		System.out.println("FIZ A PERGUNTA " + r.getStatus() + "URL: " + localTarget.getUri());
 		
 		if (r.getStatus() == Status.NOT_FOUND.getStatusCode()) {
-			System.out.println("DEU QUE NAO EXISTE");
 			return false;
 		} else {
-			System.out.println("DEU QUE EXISTE");
 			return true;
 		}
 	}

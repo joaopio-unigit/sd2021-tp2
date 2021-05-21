@@ -247,7 +247,7 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 					}
 				}			
 
-				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache);
+				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache, ReplicationSpreadsheetsServer.serverSecret);
 				
 				if(sheetValues != null) {
 					
@@ -367,10 +367,10 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public void deleteUserSpreadsheets(String userId) {
+	public void deleteUserSpreadsheets(String userId, String secret) {
 		Log.info("deleteUserSpreadsheets : " + userId);
 
-		if (userId == null)
+		if (userId == null || !secret.equals(ReplicationSpreadsheetsServer.serverSecret))
 			throw new WebApplicationException(Status.BAD_REQUEST);
 
 		List<String> userIdSheets = owners.remove(userId);
@@ -381,9 +381,12 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range) {
+	public String[][] importRange(String sheetId, String userId, String range, String secret) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
+		if(!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
 		Spreadsheet sheet = spreadsheets.get(sheetId);
 
 		checkIfSheetExists(sheet);
@@ -420,7 +423,7 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 					public String[][] getRangeValues(String sheetURL, String range) {
 						String userIdDomain = sheet.getOwner() + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
 
-						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, CLIENT_DEFAULT_RETRIES);
+						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, CLIENT_DEFAULT_RETRIES, ReplicationSpreadsheetsServer.serverSecret);
 
 						return sheetValues;
 					}
