@@ -13,16 +13,16 @@ import java.util.concurrent.Executors;
 
 import java.util.logging.Logger;
 
-import org.apache.zookeeper.CreateMode;
-
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 
 import tp1.api.Spreadsheet;
 import tp1.api.engine.AbstractSpreadsheet;
 import tp1.api.service.rest.ReplicationRestSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
+import tp1.clients.rest.ReplicationMiddleman;
 import tp1.clients.rest.SheetsMiddleman;
 import tp1.clients.rest.UsersMiddleman;
 import tp1.impl.engine.SpreadsheetEngineImpl;
@@ -30,14 +30,12 @@ import tp1.server.rest.replication.ReplicationSpreadsheetsServer;
 import tp1.server.rest.UsersServer;
 import tp1.util.CellRange;
 import tp1.util.Discovery;
-import tp1.util.ZookeeperProcessor;
 
 @Singleton
-public class ReplicationSpreadsheetsResource implements RestSpreadsheets, ReplicationRestSpreadsheets {
+public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadsheets {
 
 	private static final boolean CLIENT_DEFAULT_RETRIES = false;
-	private static final String ZOO_ERROR = "Error on instantiating Zookeeper.";
-
+	
 	private final Map<String, Spreadsheet> spreadsheets;
 	private final Map<String, List<String>> owners;
 
@@ -50,12 +48,12 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets, Replic
 	private UsersMiddleman usersM;
 	private SheetsMiddleman sheetsM;
 
-	private ZookeeperProcessor zk;
+	private ReplicationMiddleman replicationM;
 
 	public ReplicationSpreadsheetsResource() {
-		
+
 		System.out.println("A INICIAR O RESOURCE");
-		
+
 		spreadsheets = new HashMap<String, Spreadsheet>();
 		owners = new HashMap<String, List<String>>();
 
@@ -67,14 +65,13 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets, Replic
 		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain);
 		sheetsM = new SheetsMiddleman();
 		setSheetsMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain);
-		
-		System.out.println("A INICIAR O ZOO");
-		
-		startZookeeper();
+
+		replicationM = new ReplicationMiddleman();
 	}
 
 	@Override
 	public String createSpreadsheet(Spreadsheet sheet, String password) {
+		if(replicationM.isPrimary()) {
 		Log.info("createSpreadsheet : " + sheet + "; pwd = " + password);
 
 		if (sheet == null || password == null)
@@ -96,26 +93,30 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets, Replic
 
 		if (correctPassword) {
 			String sheetID = UUID.randomUUID().toString();
-			String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
-
 			sheet.setSheetId(sheetID);
-			sheet.setSheetURL(sheetURL);
 
+			replicationM.createSpreadsheet(sheet, password);
+			
+			String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
+			sheet.setSheetURL(sheetURL);
 			spreadsheets.put(sheetID, sheet);
 
 			List<String> sheetOwnerSheets = owners.get(sheetOwner);
-
 			if (sheetOwnerSheets == null) {
 				sheetOwnerSheets = new ArrayList<String>();
 				owners.put(sheetOwner, sheetOwnerSheets);
 			}
-
 			sheetOwnerSheets.add(sheetID);
 
 			return sheetID;
 		} else {
 			Log.info("Password is incorrect.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
+		}
+		}
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
 		}
 	}
 
@@ -442,80 +443,31 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets, Replic
 		return cellR.extractRangeValuesFrom(rangeValues);
 	}
 
-	
-	// ZOOKEEPER
-
-	private void startZookeeper() {
-		try {
-			zk = new ZookeeperProcessor("localhost:2181,kafka:2181");
-		} catch (Exception e) {
-			Log.info(ZOO_ERROR);
-		}
-
-		String domainZNode = "/" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
-
-		String znodePath = zk.write(domainZNode, CreateMode.PERSISTENT);
-
-		if (znodePath != null) {
-			System.out.println("Created znode: " + znodePath);
-		}
-
-		String serverZNode = String.format("%s/%s_", domainZNode, "replica_");
-
-		// PASSAR O URL DO SERVIDOR NO NOME DO ZNODE
-		znodePath = zk.write(serverZNode, ReplicationSpreadsheetsServer.serverURL, CreateMode.EPHEMERAL_SEQUENTIAL);
-		System.out.println("Created child znode: " + znodePath);
-
-		zk.getChildren(domainZNode, zk);
-	}
-
-	
 	// OPERACOES
 
 	@Override
 	public String createSpreadsheetOperation(Spreadsheet sheet, String password) {
 		Log.info("createSpreadsheetOperation : " + sheet + "; pwd = " + password);
 
-		if (sheet == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
-
+		String sheetID = sheet.getSheetId();
+		
 		String sheetOwner = sheet.getOwner();
+		
+		String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
+		sheet.setSheetURL(sheetURL);
 
-		if (sheetOwner == null || sheet.getRows() < 0 || sheet.getColumns() < 0) {
-			Log.info("Sheet object invalid.");
-			throw new WebApplicationException(Status.BAD_REQUEST);
+		spreadsheets.put(sheetID, sheet);
+
+		List<String> sheetOwnerSheets = owners.get(sheetOwner);
+
+		if (sheetOwnerSheets == null) {
+			sheetOwnerSheets = new ArrayList<String>();
+			owners.put(sheetOwner, sheetOwnerSheets);
 		}
 
-		if (!usersM.hasUser(sheetOwner, ReplicationSpreadsheetsServer.serverSecret)) {
-			Log.info("User does not exist.");
-			throw new WebApplicationException(Status.BAD_REQUEST);
-		}
+		sheetOwnerSheets.add(sheetID);
 
-		boolean correctPassword = usersM.checkPassword(sheetOwner, password);
-
-		if (correctPassword) {
-			String sheetID = UUID.randomUUID().toString();
-			String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
-
-			sheet.setSheetId(sheetID);
-			sheet.setSheetURL(sheetURL);
-
-			spreadsheets.put(sheetID, sheet);
-
-			List<String> sheetOwnerSheets = owners.get(sheetOwner);
-
-			if (sheetOwnerSheets == null) {
-				sheetOwnerSheets = new ArrayList<String>();
-				owners.put(sheetOwner, sheetOwnerSheets);
-			}
-
-			sheetOwnerSheets.add(sheetID);
-
-			return sheetID;
-		} else {
-			Log.info("Password is incorrect.");
-			throw new WebApplicationException(Status.BAD_REQUEST);
-		}
+		return sheetID;
 	}
 
 	@Override
@@ -841,7 +793,6 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets, Replic
 		return cellR.extractRangeValuesFrom(rangeValues);
 	}
 
-	
 	// METODOS PRIVADOS
 
 	private void setUsersMiddlemanURI(String domain) {

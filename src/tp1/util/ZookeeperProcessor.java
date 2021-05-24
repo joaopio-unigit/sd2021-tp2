@@ -60,5 +60,19 @@ public class ZookeeperProcessor implements Watcher {
 	public void process(WatchedEvent event) {
 		System.out.println(event);
 	}
+
+	public String getValue(String path) {
+		String value = null;
+		try {
+			System.out.println("VOU PROCURAR EM " + path);
+			byte[] data = zk.getData(path, false, null);
+			if(data != null)
+				value = new String(data);
+		}catch(KeeperException | InterruptedException e) {
+			System.out.println("PROBLEMA A ACEDER AO NO");
+		}
+		
+		return value;
+	}
 	
 }

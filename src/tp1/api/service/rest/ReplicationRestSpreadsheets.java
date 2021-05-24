@@ -12,10 +12,8 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import tp1.api.Spreadsheet;
 
-@Path(ReplicationRestSpreadsheets.PATH)
-public interface ReplicationRestSpreadsheets {
-	
-	public static final String PATH="/spreadsheetsreplication";
+public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
+
 	public static final String DELETESHEETS = "/deleteSheets";
 	public static final String OPERATION = "/operation";
 	

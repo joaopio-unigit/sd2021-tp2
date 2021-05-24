@@ -44,7 +44,7 @@ public class ReplicationSpreadsheetsServer {
 				
 		//HTTPS
 		serverURL = String.format("https://%s:%s/rest", ip, PORT);
-
+		
 		ResourceConfig config = new ResourceConfig();
 		config.register(ReplicationSpreadsheetsResource.class);
 		config.register(new GenericExceptionMapper());

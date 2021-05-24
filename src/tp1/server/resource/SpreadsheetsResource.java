@@ -60,8 +60,6 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 		setUsersMiddlemanURI(SpreadsheetsServer.spreadsheetsDomain);
 		sheetsM = new SheetsMiddleman();
 		setSheetsMiddlemanURI(SpreadsheetsServer.spreadsheetsDomain);
-
-	
 	}
 
 	@Override
