@@ -56,6 +56,8 @@ public class ReplicationMiddleman {
 		config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
 		config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
 		Client client = ClientBuilder.newClient(config);
+		
+		
 	}
 	
 	// ZOOKEEPER
