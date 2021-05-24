@@ -21,6 +21,7 @@ import jakarta.ws.rs.core.Response.Status;
 
 import tp1.api.Spreadsheet;
 import tp1.api.engine.AbstractSpreadsheet;
+import tp1.api.service.rest.ReplicationRestSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
 import tp1.clients.rest.SheetsMiddleman;
 import tp1.clients.rest.UsersMiddleman;
@@ -32,15 +33,15 @@ import tp1.util.Discovery;
 import tp1.util.ZookeeperProcessor;
 
 @Singleton
-public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
+public class ReplicationSpreadsheetsResource implements RestSpreadsheets, ReplicationRestSpreadsheets {
 
 	private static final boolean CLIENT_DEFAULT_RETRIES = false;
 	private static final String ZOO_ERROR = "Error on instantiating Zookeeper.";
-	
+
 	private final Map<String, Spreadsheet> spreadsheets;
 	private final Map<String, List<String>> owners;
 
-	private final Map<String, Map<String, String[][]>> cache;	// CACHE
+	private final Map<String, Map<String, String[][]>> cache; // CACHE
 	private ExecutorService exec; // CACHE
 
 	private static Logger Log = Logger.getLogger(ReplicationSpreadsheetsResource.class.getName());
@@ -48,14 +49,17 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 	private Discovery discovery;
 	private UsersMiddleman usersM;
 	private SheetsMiddleman sheetsM;
-	
+
 	private ZookeeperProcessor zk;
 
 	public ReplicationSpreadsheetsResource() {
+		
+		System.out.println("A INICIAR O RESOURCE");
+		
 		spreadsheets = new HashMap<String, Spreadsheet>();
 		owners = new HashMap<String, List<String>>();
 
-		cache = new HashMap<String, Map<String, String[][]>>();	//CACHE
+		cache = new HashMap<String, Map<String, String[][]>>(); // CACHE
 		exec = Executors.newCachedThreadPool(); // CACHE
 
 		discovery = ReplicationSpreadsheetsServer.sheetsDiscovery;
@@ -63,10 +67,12 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain);
 		sheetsM = new SheetsMiddleman();
 		setSheetsMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain);
-
+		
+		System.out.println("A INICIAR O ZOO");
+		
 		startZookeeper();
 	}
-	
+
 	@Override
 	public String createSpreadsheet(Spreadsheet sheet, String password) {
 		Log.info("createSpreadsheet : " + sheet + "; pwd = " + password);
@@ -130,7 +136,7 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 		}
 
 		checkUserPassword(sheet.getOwner(), password);
-		
+
 		spreadsheets.remove(sheetId);
 	}
 
@@ -240,25 +246,27 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 				String userIdDomain = sheetOwner + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
 
 				boolean rangeStoredInCache = false;
-				
-				if(cache.get(sheetURL) != null){
-					if(cache.get(sheetURL).get(range) != null){
-							rangeStoredInCache = true;
-					}
-				}			
 
-				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache, ReplicationSpreadsheetsServer.serverSecret);
-				
-				if(sheetValues != null) {
-					
-					exec.execute(()-> {insertNewValuesInCache(sheetURL, range, sheetValues);});
+				if (cache.get(sheetURL) != null) {
+					if (cache.get(sheetURL).get(range) != null) {
+						rangeStoredInCache = true;
+					}
 				}
-				else {
+
+				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache,
+						ReplicationSpreadsheetsServer.serverSecret);
+
+				if (sheetValues != null) {
+
+					exec.execute(() -> {
+						insertNewValuesInCache(sheetURL, range, sheetValues);
+					});
+				} else {
 					Map<String, String[][]> cachedSheetValues = cache.get(sheetURL);
-					if(cachedSheetValues != null)
+					if (cachedSheetValues != null)
 						return cachedSheetValues.get(range);
 				}
-				
+
 				return sheetValues;
 			}
 		});
@@ -302,7 +310,8 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 
 		checkValidUserId(userIdNoDomain);
 
-		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE FOLHAS
+		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
+																				// FOLHAS
 
 		Spreadsheet sheet;
 		Set<String> sharedUsers;
@@ -315,9 +324,9 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 
 			sharedUsers = sheet.getSharedWith();
 		}
-		
+
 		checkUserPassword(sheet.getOwner(), password);
-		
+
 		if (sharedUsers.contains(userId)) {
 			Log.info("Already shared with the user.");
 			throw new WebApplicationException(Status.CONFLICT);
@@ -339,7 +348,8 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 
 		checkValidUserId(userIdNoDomain);
 
-		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE FOLHAS
+		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
+																				// FOLHAS
 
 		if (sheetId == null || userId == null || password == null)
 			throw new WebApplicationException(Status.BAD_REQUEST);
@@ -363,7 +373,6 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 		checkUserPassword(sheet.getOwner(), password);
 
 		sharedUsers.remove(userId);
-
 	}
 
 	@Override
@@ -384,9 +393,9 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 	public String[][] importRange(String sheetId, String userId, String range, String secret) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
-		if(!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
+		if (!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
 			throw new WebApplicationException(Status.BAD_REQUEST);
-		
+
 		Spreadsheet sheet = spreadsheets.get(sheetId);
 
 		checkIfSheetExists(sheet);
@@ -423,17 +432,418 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 					public String[][] getRangeValues(String sheetURL, String range) {
 						String userIdDomain = sheet.getOwner() + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
 
-						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, CLIENT_DEFAULT_RETRIES, ReplicationSpreadsheetsServer.serverSecret);
+						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
+								CLIENT_DEFAULT_RETRIES, ReplicationSpreadsheetsServer.serverSecret);
 
 						return sheetValues;
 					}
 				});
-		
+
 		return cellR.extractRangeValuesFrom(rangeValues);
 	}
 
-	//METODOS PRIVADOS
 	
+	// ZOOKEEPER
+
+	private void startZookeeper() {
+		try {
+			zk = new ZookeeperProcessor("localhost:2181,kafka:2181");
+		} catch (Exception e) {
+			Log.info(ZOO_ERROR);
+		}
+
+		String domainZNode = "/" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
+
+		String znodePath = zk.write(domainZNode, CreateMode.PERSISTENT);
+
+		if (znodePath != null) {
+			System.out.println("Created znode: " + znodePath);
+		}
+
+		String serverZNode = String.format("%s/%s_", domainZNode, "replica_");
+
+		// PASSAR O URL DO SERVIDOR NO NOME DO ZNODE
+		znodePath = zk.write(serverZNode, ReplicationSpreadsheetsServer.serverURL, CreateMode.EPHEMERAL_SEQUENTIAL);
+		System.out.println("Created child znode: " + znodePath);
+
+		zk.getChildren(domainZNode, zk);
+	}
+
+	
+	// OPERACOES
+
+	@Override
+	public String createSpreadsheetOperation(Spreadsheet sheet, String password) {
+		Log.info("createSpreadsheetOperation : " + sheet + "; pwd = " + password);
+
+		if (sheet == null || password == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		String sheetOwner = sheet.getOwner();
+
+		if (sheetOwner == null || sheet.getRows() < 0 || sheet.getColumns() < 0) {
+			Log.info("Sheet object invalid.");
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		}
+
+		if (!usersM.hasUser(sheetOwner, ReplicationSpreadsheetsServer.serverSecret)) {
+			Log.info("User does not exist.");
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		}
+
+		boolean correctPassword = usersM.checkPassword(sheetOwner, password);
+
+		if (correctPassword) {
+			String sheetID = UUID.randomUUID().toString();
+			String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
+
+			sheet.setSheetId(sheetID);
+			sheet.setSheetURL(sheetURL);
+
+			spreadsheets.put(sheetID, sheet);
+
+			List<String> sheetOwnerSheets = owners.get(sheetOwner);
+
+			if (sheetOwnerSheets == null) {
+				sheetOwnerSheets = new ArrayList<String>();
+				owners.put(sheetOwner, sheetOwnerSheets);
+			}
+
+			sheetOwnerSheets.add(sheetID);
+
+			return sheetID;
+		} else {
+			Log.info("Password is incorrect.");
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		}
+	}
+
+	@Override
+	public void deleteSpreadsheetOperation(String sheetId, String password) {
+		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId + "; pwd = " + password);
+
+		if (sheetId == null || password == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		Spreadsheet sheet;
+
+		synchronized (this) {
+			sheet = spreadsheets.get(sheetId);
+
+			// 404
+			checkIfSheetExists(sheet);
+		}
+
+		checkUserPassword(sheet.getOwner(), password);
+
+		spreadsheets.remove(sheetId);
+	}
+
+	@Override
+	public Spreadsheet getSpreadsheetOperation(String sheetId, String userId, String password) {
+		Log.info("getSpreadsheetOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
+
+		if (sheetId == null || userId == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		checkValidUserId(userId);
+
+		checkUserPassword(userId, password);
+
+		Spreadsheet sheet;
+
+		synchronized (this) {
+
+			sheet = spreadsheets.get(sheetId);
+
+			checkIfSheetExists(sheet);
+
+			Set<String> sharedUsers = sheet.getSharedWith();
+
+			String searchingUser = userId + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
+
+			boolean hasAccess = true;
+
+			if (!sheet.getOwner().equals(userId)) {
+				if (sharedUsers == null || sharedUsers.isEmpty()) {
+					hasAccess = false;
+				} else {
+					if (!sharedUsers.contains(searchingUser)) {
+						hasAccess = false;
+					}
+				}
+			}
+
+			if (!hasAccess) {
+				Log.info("User does not have access to the spreadsheet.");
+				throw new WebApplicationException(Status.FORBIDDEN);
+			}
+		}
+
+		return sheet;
+	}
+
+	@Override
+	public String[][] getSpreadsheetValuesOperation(String sheetId, String userId, String password) {
+		Log.info("getSpreadsheetValuesOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
+
+		if (sheetId == null || userId == null || password == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		checkValidUserId(userId);
+
+		String[][] sheetValues;
+
+		Spreadsheet sheet;
+		Set<String> sharedUsers;
+
+		synchronized (this) {
+
+			sheet = spreadsheets.get(sheetId);
+
+			checkIfSheetExists(sheet);
+
+			sharedUsers = sheet.getSharedWith();
+		}
+
+		checkUserPassword(userId, password);
+
+		String sheetOwner = sheet.getOwner();
+
+		String userIdDomain = userId + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
+
+		if (!(sharedUsers.contains(userIdDomain) || sheetOwner.equals(userId))) {
+			Log.info("UserId without access.");
+			throw new WebApplicationException(Status.FORBIDDEN);
+		}
+
+		sheetValues = SpreadsheetEngineImpl.getInstance().computeSpreadsheetValues(new AbstractSpreadsheet() {
+
+			@Override
+			public String sheetId() {
+				return sheet.getSheetId();
+			}
+
+			@Override
+			public int rows() {
+				return sheet.getRows();
+			}
+
+			@Override
+			public int columns() {
+				return sheet.getColumns();
+			}
+
+			@Override
+			public String cellRawValue(int row, int col) {
+				return sheet.getCellRawValue(row, col);
+			}
+
+			@Override
+			public String[][] getRangeValues(String sheetURL, String range) {
+
+				String userIdDomain = sheetOwner + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
+
+				boolean rangeStoredInCache = false;
+
+				if (cache.get(sheetURL) != null) {
+					if (cache.get(sheetURL).get(range) != null) {
+						rangeStoredInCache = true;
+					}
+				}
+
+				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache,
+						ReplicationSpreadsheetsServer.serverSecret);
+
+				if (sheetValues != null) {
+
+					exec.execute(() -> {
+						insertNewValuesInCache(sheetURL, range, sheetValues);
+					});
+				} else {
+					Map<String, String[][]> cachedSheetValues = cache.get(sheetURL);
+					if (cachedSheetValues != null)
+						return cachedSheetValues.get(range);
+				}
+
+				return sheetValues;
+			}
+		});
+
+		return sheetValues;
+	}
+
+	@Override
+	public void updateCellOperation(String sheetId, String cell, String rawValue, String userId, String password) {
+		Log.info("updateCellOperaion : " + cell + "; value = " + rawValue + "; sheet = " + sheetId + "; userId = "
+				+ userId + "; pwd = " + password);
+
+		if (sheetId == null || cell == null || rawValue == null || userId == null || password == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		checkUserPassword(userId, password);
+
+		synchronized (this) {
+
+			Spreadsheet sheet = spreadsheets.get(sheetId);
+
+			checkIfSheetExists(sheet);
+
+			sheet.setCellRawValue(cell, rawValue);
+		}
+	}
+
+	@Override
+	public void shareSpreadsheetOperation(String sheetId, String userId, String password) {
+		Log.info("shareSpreadsheetOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
+
+		if (sheetId == null || userId == null || password == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		String[] userInfo = userId.split("@");
+
+		String userIdNoDomain = userInfo[0];
+		String domain = userInfo[1];
+
+		setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
+
+		checkValidUserId(userIdNoDomain);
+
+		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
+																				// FOLHAS
+
+		Spreadsheet sheet;
+		Set<String> sharedUsers;
+
+		synchronized (this) {
+
+			sheet = spreadsheets.get(sheetId);
+
+			checkIfSheetExists(sheet);
+
+			sharedUsers = sheet.getSharedWith();
+		}
+
+		checkUserPassword(sheet.getOwner(), password);
+
+		if (sharedUsers.contains(userId)) {
+			Log.info("Already shared with the user.");
+			throw new WebApplicationException(Status.CONFLICT);
+		}
+
+		sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
+	}
+
+	@Override
+	public void unshareSpreadsheetOperation(String sheetId, String userId, String password) {
+		Log.info("unshareSpreadsheetOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
+
+		String[] userInfo = userId.split("@");
+
+		String userIdNoDomain = userInfo[0];
+		String domain = userInfo[1];
+
+		setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
+
+		checkValidUserId(userIdNoDomain);
+
+		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
+																				// FOLHAS
+
+		if (sheetId == null || userId == null || password == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		Spreadsheet sheet;
+		Set<String> sharedUsers;
+
+		synchronized (this) {
+			sheet = spreadsheets.get(sheetId);
+
+			checkIfSheetExists(sheet);
+
+			sharedUsers = sheet.getSharedWith();
+		}
+
+		if (!sharedUsers.contains(userId)) {
+			Log.info("Share not existing.");
+			throw new WebApplicationException(Status.NOT_FOUND);
+		}
+
+		checkUserPassword(sheet.getOwner(), password);
+
+		sharedUsers.remove(userId);
+	}
+
+	@Override
+	public void deleteUserSpreadsheetsOperation(String userId, String secret) {
+		Log.info("deleteUserSpreadsheetsOperation : " + userId);
+
+		if (userId == null || !secret.equals(ReplicationSpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		List<String> userIdSheets = owners.remove(userId);
+
+		for (String sheetId : userIdSheets) {
+			spreadsheets.remove(sheetId);
+		}
+	}
+
+	@Override
+	public String[][] importRangeOperation(String sheetId, String userId, String range, String secret) {
+		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
+
+		if (!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+
+		Spreadsheet sheet = spreadsheets.get(sheetId);
+
+		checkIfSheetExists(sheet);
+
+		if (!sheet.getSharedWith().contains(userId))
+			throw new WebApplicationException(Status.FORBIDDEN);
+
+		CellRange cellR = new CellRange(range);
+
+		String[][] rangeValues = SpreadsheetEngineImpl.getInstance()
+				.computeSpreadsheetValues(new AbstractSpreadsheet() {
+
+					@Override
+					public String sheetId() {
+						return sheet.getSheetId();
+					}
+
+					@Override
+					public int rows() {
+						return sheet.getRows();
+					}
+
+					@Override
+					public int columns() {
+						return sheet.getColumns();
+					}
+
+					@Override
+					public String cellRawValue(int row, int col) {
+						return sheet.getCellRawValue(row, col);
+					}
+
+					@Override
+					public String[][] getRangeValues(String sheetURL, String range) {
+						String userIdDomain = sheet.getOwner() + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
+
+						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
+								CLIENT_DEFAULT_RETRIES, ReplicationSpreadsheetsServer.serverSecret);
+
+						return sheetValues;
+					}
+				});
+
+		return cellR.extractRangeValuesFrom(rangeValues);
+	}
+
+	
+	// METODOS PRIVADOS
+
 	private void setUsersMiddlemanURI(String domain) {
 
 		String service = domain + ":" + UsersServer.SERVICE;
@@ -472,14 +882,14 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	private void insertNewValuesInCache(String sheetId, String range, String[][] newRangeValues) {
-		
+
 		Map<String, String[][]> sheetCachedRanges = cache.get(sheetId);
-		if(sheetCachedRanges == null) {
+		if (sheetCachedRanges == null) {
 			sheetCachedRanges = new HashMap<String, String[][]>();
 		}
-		
+
 		sheetCachedRanges.put(range, newRangeValues);
-		
+
 		cache.put(sheetId, sheetCachedRanges);
 	}
 
@@ -489,11 +899,11 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
 	}
-	
+
 	private void checkUserPassword(String userId, String password) {
-		
+
 		boolean correctPassword = usersM.checkPassword(userId, password);
-	
+
 		if (!correctPassword) {
 			Log.info("Password is incorrect.");
 			throw new WebApplicationException(Status.FORBIDDEN);
@@ -506,28 +916,5 @@ public class ReplicationSpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
 	}
-	
-	//ZOOKEEPER
-	
-	private void startZookeeper() {
-		try {
-			zk = new ZookeeperProcessor( "localhost:2181,kafka:2181");
-		} catch (Exception e) {	Log.info(ZOO_ERROR); }
-		
-		String domainZNode = "/" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
-		
-		String znodePath = zk.write(domainZNode, CreateMode.PERSISTENT);
-		
-		if(znodePath != null) {
-			System.out.println("Created znode: " + znodePath);
-		}
-		
-		String serverZNode = String.format("%s/%s_", domainZNode, ReplicationSpreadsheetsServer.serverURL);
-		
-		//PASSAR O URL DO SERVIDOR NO NOME DO ZNODE
-		znodePath  = zk.write(serverZNode, CreateMode.EPHEMERAL_SEQUENTIAL);
-		System.out.println("Created child znode: " + znodePath);
-		
-		zk.getChildren(domainZNode, zk);
-	}
+
 }
