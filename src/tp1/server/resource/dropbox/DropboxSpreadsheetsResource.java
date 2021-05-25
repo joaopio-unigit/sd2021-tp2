@@ -50,7 +50,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 		sheetsM = new SheetsMiddleman();
 		setSheetsMiddlemanURI(DropboxSpreadsheetsServer.spreadsheetsDomain);
 
-		dropboxM = new DropboxMiddleman(DropboxSpreadsheetsServer.spreadsheetsDomain);
+		dropboxM = new DropboxMiddleman(DropboxSpreadsheetsServer.spreadsheetsDomain, DropboxSpreadsheetsServer.apiKey, DropboxSpreadsheetsServer.apiSecret, DropboxSpreadsheetsServer.accessTokenStr);
 		if (DropboxSpreadsheetsServer.stateReset)
 			dropboxM.resetState();
 

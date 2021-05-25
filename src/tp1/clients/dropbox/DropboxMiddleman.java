@@ -22,10 +22,6 @@ import tp1.dropbox.arguments.CreateFileV1Args;
 
 public class DropboxMiddleman {
 
-	private static final String apiKey = "uiz15boz3dj0e94";
-	private static final String apiSecret = "m7c4iokhadmg8nm";
-	private static final String accessTokenStr = "Wctw6I6wZIYAAAAAAAAAAW7GD6hb2rAuhv17gCfbbWJEOHl1RmjZo2nxTcEcDRA2";
-
 	protected static final String JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 	protected static final String OCTET_CONTENT_TYPE = "application/octet-stream";
 
@@ -40,7 +36,7 @@ public class DropboxMiddleman {
 
 	private String serverDomain;
 
-	public DropboxMiddleman(String serverDomain) {
+	public DropboxMiddleman(String serverDomain, String apiKey, String apiSecret, String accessTokenStr) {
 		this.serverDomain = serverDomain;
 
 		service = new ServiceBuilder(apiKey).apiSecret(apiSecret).build(DropboxApi20.INSTANCE);

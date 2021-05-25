@@ -34,21 +34,25 @@ public class DropboxSpreadsheetsServer {
 	public static Discovery sheetsDiscovery;
 	public static String serverSecret;
 	
+	public static String apiKey;
+	public static String apiSecret;
+	public static String accessTokenStr;
+	
 	public static void main(String[] args) {
 		
 		System.out.println("DROPBOX SERVER A ARRANCAR");
 		
 		spreadsheetsDomain =  args.length > 0 ? args[0] : "?";
 		serverSecret =  args.length > 0 ? args[2] : "?";
-		for(int i = 0; i < args.length; i++)
-			System.out.println("ARGUMENTO" + i +": " + args[i]);
+		
+		apiKey = args.length > 0 ? args[3] : "?";
+		apiSecret = args.length > 0 ? args[4] : "?";
+		accessTokenStr = args.length > 0 ? args[5] : "?";		
 		
 		if(args[1].equals(TRUE))
 			stateReset = true;
 		else
 			stateReset = false;
-		
-		System.out.println("VALOR DE RESET: " + stateReset);
 		
 		try {		
 		String ip = InetAddress.getLocalHost().getHostAddress();
