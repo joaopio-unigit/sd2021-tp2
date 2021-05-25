@@ -21,10 +21,7 @@ public class ZookeeperProcessor implements Watcher {
 		return instance;
 	}
 	
-	/**
-	 * @param  serviceName the name of the service to announce
-	 */
-	public ZookeeperProcessor( String hostPort) throws Exception {
+	private ZookeeperProcessor( String hostPort) throws Exception {
 		zk = new ZooKeeper(hostPort, 3000, this);
 	}
 	

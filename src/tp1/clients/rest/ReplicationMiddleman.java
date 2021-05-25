@@ -1,5 +1,6 @@
 package tp1.clients.rest;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -24,6 +25,13 @@ import jakarta.ws.rs.core.Response.Status;
 import tp1.api.Spreadsheet;
 import tp1.api.service.rest.ReplicationRestSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
+import tp1.replication.tasks.CreateSpreadsheetTask;
+import tp1.replication.tasks.DeleteSpreadsheetTask;
+import tp1.replication.tasks.DeleteUserSpreadsheetsTask;
+import tp1.replication.tasks.ShareSpreadsheetTask;
+import tp1.replication.tasks.Task;
+import tp1.replication.tasks.UnshareSpreadsheetTask;
+import tp1.replication.tasks.UpdateCellTask;
 import tp1.server.rest.replication.ReplicationSpreadsheetsServer;
 import tp1.util.InsecureHostnameVerifier;
 import tp1.util.ZookeeperProcessor;
@@ -32,11 +40,12 @@ public class ReplicationMiddleman {
 
 	private final static int CONNECTION_TIMEOUT = 10000;
 	private final static int REPLY_TIMEOUT = 1000;
-
-	private static Logger Log = Logger.getLogger(ReplicationMiddleman.class.getName());
 	private static final String ZOO_ERROR = "Error on instantiating Zookeeper.";
 	private static final String ZOOKEEPER_HOSTPORT = "localhost:2181,kafka:2181";
+	
+	private static Logger Log = Logger.getLogger(ReplicationMiddleman.class.getName());
 
+	private static ReplicationMiddleman instance;
 	private ZookeeperProcessor zk;
 
 	private String primaryServerURL;
@@ -44,10 +53,24 @@ public class ReplicationMiddleman {
 	private List<String> existingServers;
 	private ExecutorService exec;
 
-	public ReplicationMiddleman() {
+	private List<Task> tasks;
+	private int taskSequenceNumber;
+	
+	synchronized public static ReplicationMiddleman getInstance() {
+		if(instance == null)
+			instance = new ReplicationMiddleman();
+		
+		return instance;
+	}
+	
+	private ReplicationMiddleman() {
 		primaryServer = false;
 		primaryServerURL = null;
 		exec = Executors.newCachedThreadPool();
+		
+		tasks = new ArrayList<Task>();
+		taskSequenceNumber = 0;
+		
 		startZookeeper();
 	}
 
@@ -79,7 +102,10 @@ public class ReplicationMiddleman {
 			if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
 				// SUCESSO PODE SEGUIR EM FRENTE
 				int successPos = i;
+				//UMA THREAD CONTINUA O TRABALHO
 				exec.execute(() -> continueCreateSpreadsheet(successPos+1, client, sheet));
+				//ADICIONA A OPERACAO AO CONJUNTO DE OPERACOES REALIZADAS
+				tasks.add(new CreateSpreadsheetTask(getTaskSequenceNumber(), sheet));
 				break;
 			} else {
 				// PERGUNTAR
@@ -113,7 +139,10 @@ public class ReplicationMiddleman {
 			if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
 				// SUCESSO PODE SEGUIR EM FRENTE
 				int successPos = i;
+				//UMA THREAD CONTINUA O TRABALHO
 				exec.execute(() -> continueDeleteSpreadsheet(successPos+1, client, sheetId));
+				//ADICIONA A OPERACAO AO CONJUNTO DE OPERACOES REALIZADAS
+				tasks.add(new DeleteSpreadsheetTask(getTaskSequenceNumber(), sheetId));
 				break;
 			} else {
 				// PERGUNTAR
@@ -150,7 +179,10 @@ public class ReplicationMiddleman {
 			if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
 				// SUCESSO PODE SEGUIR EM FRENTE
 				int successPos = i;
+				//UMA THREAD CONTINUA O TRABALHO
 				exec.execute(() -> continueUpdateCell(successPos+1, client, sheetId, cell, rawValue));
+				//ADICIONA A OPERACAO AO CONJUNTO DE OPERACOES REALIZADAS
+				tasks.add(new UpdateCellTask(getTaskSequenceNumber(), sheetId, cell, rawValue));
 				break;
 			} else {
 				// PERGUNTAR
@@ -186,7 +218,10 @@ public class ReplicationMiddleman {
 			if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
 				// SUCESSO PODE SEGUIR EM FRENTE
 				int successPos = i;
+				//UMA THREAD CONTINUA O TRABALHO
 				exec.execute(() -> continueShareSpreadsheet(successPos+1, client, sheetId, userId));
+				//ADICIONA A OPERACAO AO CONJUNTO DE OPERACOES REALIZADAS
+				tasks.add(new ShareSpreadsheetTask(getTaskSequenceNumber(), sheetId, userId));
 				break;
 			} else {
 				// PERGUNTAR
@@ -222,7 +257,10 @@ public class ReplicationMiddleman {
 			if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
 				// SUCESSO PODE SEGUIR EM FRENTE
 				int successPos = i;
+				//UMA THREAD CONTINUA O TRABALHO
 				exec.execute(() -> continueUnshareSpreadsheet(successPos+1, client, sheetId, userId));
+				//ADICIONA A OPERACAO AO CONJUNTO DE OPERACOES REALIZADAS
+				tasks.add(new UnshareSpreadsheetTask(getTaskSequenceNumber(), sheetId, userId));
 				break;
 			} else {
 				// PERGUNTAR
@@ -258,7 +296,10 @@ public class ReplicationMiddleman {
 			if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
 				// SUCESSO PODE SEGUIR EM FRENTE
 				int successPos = i;
+				//UMA THREAD CONTINUA O TRABALHO
 				exec.execute(() -> continueDeleteUserSpreadsheets(successPos+1, client, userId, secret));
+				//ADICIONA A OPERACAO AO CONJUNTO DE OPERACOES REALIZADAS
+				tasks.add(new DeleteUserSpreadsheetsTask(getTaskSequenceNumber(),userId));
 				break;
 			} else {
 				// PERGUNTAR
@@ -275,7 +316,13 @@ public class ReplicationMiddleman {
 			target.request().accept(MediaType.APPLICATION_JSON).delete();
 		}
 	}
-		
+	
+	synchronized private int getTaskSequenceNumber() {
+		int currentSequenceNumber = taskSequenceNumber;
+		taskSequenceNumber++;
+		return currentSequenceNumber;
+	}
+
 	// ZOOKEEPER
 
 	private void startZookeeper() {
