@@ -94,7 +94,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		if (correctPassword) {
 			String sheetID = UUID.randomUUID().toString();
 			sheet.setSheetId(sheetID);
-
+			
+			//MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			replicationM.createSpreadsheet(sheet, password);
 			
 			String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
@@ -122,27 +123,35 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public void deleteSpreadsheet(String sheetId, String password) {
-		Log.info("deleteSpreadsheet : sheet = " + sheetId + "; pwd = " + password);
+		if(replicationM.isPrimary()) {
+			Log.info("deleteSpreadsheet : sheet = " + sheetId + "; pwd = " + password);
 
-		if (sheetId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
+			if (sheetId == null || password == null)
+				throw new WebApplicationException(Status.BAD_REQUEST);
+			
+			Spreadsheet sheet;
 
-		Spreadsheet sheet;
+			synchronized (this) {
+				sheet = spreadsheets.get(sheetId);
 
-		synchronized (this) {
-			sheet = spreadsheets.get(sheetId);
+				// 404
+				checkIfSheetExists(sheet);
+			}
 
-			// 404
-			checkIfSheetExists(sheet);
+			checkUserPassword(sheet.getOwner(), password);
+			
+			replicationM.deleteSpreadsheet(sheetId);
+			spreadsheets.remove(sheetId);
 		}
-
-		checkUserPassword(sheet.getOwner(), password);
-
-		spreadsheets.remove(sheetId);
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+		}
 	}
 
 	@Override
-	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password) {
+	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password) {							//OPERACAO DE LEITURA
+		if(replicationM.isPrimary()) {
 		Log.info("getSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 		if (sheetId == null || userId == null)
@@ -183,10 +192,16 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		}
 
 		return sheet;
+		}
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+		}
 	}
 
 	@Override
-	public String[][] getSpreadsheetValues(String sheetId, String userId, String password) {
+	public String[][] getSpreadsheetValues(String sheetId, String userId, String password) {					//OPERACAO DE LEITURA
+		if(replicationM.isPrimary()) {
 		Log.info("getSpreadsheetValues : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 		if (sheetId == null || userId == null || password == null)
@@ -273,125 +288,159 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		});
 
 		return sheetValues;
+		}
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+		}
 	}
 
 	@Override
 	public void updateCell(String sheetId, String cell, String rawValue, String userId, String password) {
-		Log.info("updateCell : " + cell + "; value = " + rawValue + "; sheet = " + sheetId + "; userId = " + userId
+		if(replicationM.isPrimary()) {
+			Log.info("updateCell : " + cell + "; value = " + rawValue + "; sheet = " + sheetId + "; userId = " + userId
 				+ "; pwd = " + password);
 
-		if (sheetId == null || cell == null || rawValue == null || userId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
+			if (sheetId == null || cell == null || rawValue == null || userId == null || password == null)
+				throw new WebApplicationException(Status.BAD_REQUEST);
 
-		checkUserPassword(userId, password);
+			checkUserPassword(userId, password);
 
-		synchronized (this) {
+			Spreadsheet sheet;
+		
+			synchronized (this) {
 
-			Spreadsheet sheet = spreadsheets.get(sheetId);
+				sheet = spreadsheets.get(sheetId);
 
-			checkIfSheetExists(sheet);
-
+				checkIfSheetExists(sheet);			
+			}
+		
+			replicationM.updateCell(sheetId, cell, rawValue);
 			sheet.setCellRawValue(cell, rawValue);
+		}
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
 		}
 	}
 
 	@Override
 	public void shareSpreadsheet(String sheetId, String userId, String password) {
-		Log.info("shareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
+		if(replicationM.isPrimary()) {
+			Log.info("shareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
+			
+			if (sheetId == null || userId == null || password == null)
+				throw new WebApplicationException(Status.BAD_REQUEST);
+			
+			String[] userInfo = userId.split("@");
 
-		if (sheetId == null || userId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
+			String userIdNoDomain = userInfo[0];
+			String domain = userInfo[1];
 
-		String[] userInfo = userId.split("@");
+			setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
 
-		String userIdNoDomain = userInfo[0];
-		String domain = userInfo[1];
+			checkValidUserId(userIdNoDomain);
 
-		setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
+			setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE FOLHAS
 
-		checkValidUserId(userIdNoDomain);
+			Spreadsheet sheet;
+			Set<String> sharedUsers;
 
-		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
-																				// FOLHAS
+			synchronized (this) {
 
-		Spreadsheet sheet;
-		Set<String> sharedUsers;
+				sheet = spreadsheets.get(sheetId);
+					
+				checkIfSheetExists(sheet);
 
-		synchronized (this) {
+				sharedUsers = sheet.getSharedWith();
+			}
 
-			sheet = spreadsheets.get(sheetId);
+			checkUserPassword(sheet.getOwner(), password);
 
-			checkIfSheetExists(sheet);
-
-			sharedUsers = sheet.getSharedWith();
+			if (sharedUsers.contains(userId)) {
+				Log.info("Already shared with the user.");
+				throw new WebApplicationException(Status.CONFLICT);
+			}
+		
+			replicationM.shareSpreadsheet(sheetId, userId);
+			sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
 		}
-
-		checkUserPassword(sheet.getOwner(), password);
-
-		if (sharedUsers.contains(userId)) {
-			Log.info("Already shared with the user.");
-			throw new WebApplicationException(Status.CONFLICT);
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
 		}
-
-		sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
 	}
 
 	@Override
 	public void unshareSpreadsheet(String sheetId, String userId, String password) {
-		Log.info("unshareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
+		if(replicationM.isPrimary()) {
+			Log.info("unshareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
-		String[] userInfo = userId.split("@");
+			if (sheetId == null || userId == null || password == null)
+				throw new WebApplicationException(Status.BAD_REQUEST);
 
-		String userIdNoDomain = userInfo[0];
-		String domain = userInfo[1];
+			String[] userInfo = userId.split("@");
 
-		setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
+			String userIdNoDomain = userInfo[0];
+			String domain = userInfo[1];
 
-		checkValidUserId(userIdNoDomain);
+			setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
+			
+			checkValidUserId(userIdNoDomain);
 
-		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
-																				// FOLHAS
+			setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE FOLHAS
+			Spreadsheet sheet;
+			Set<String> sharedUsers;
 
-		if (sheetId == null || userId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
+			synchronized (this) {
+				sheet = spreadsheets.get(sheetId);
 
-		Spreadsheet sheet;
-		Set<String> sharedUsers;
+				checkIfSheetExists(sheet);
 
-		synchronized (this) {
-			sheet = spreadsheets.get(sheetId);
+				sharedUsers = sheet.getSharedWith();
+			}
 
-			checkIfSheetExists(sheet);
+			if (!sharedUsers.contains(userId)) {
+				Log.info("Share not existing.");
+				throw new WebApplicationException(Status.NOT_FOUND);
+			}
 
-			sharedUsers = sheet.getSharedWith();
+			checkUserPassword(sheet.getOwner(), password);
+			
+			replicationM.unshareSpreadsheet(sheetId, userId);
+			sharedUsers.remove(userId);
 		}
-
-		if (!sharedUsers.contains(userId)) {
-			Log.info("Share not existing.");
-			throw new WebApplicationException(Status.NOT_FOUND);
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
 		}
-
-		checkUserPassword(sheet.getOwner(), password);
-
-		sharedUsers.remove(userId);
 	}
 
 	@Override
 	public void deleteUserSpreadsheets(String userId, String secret) {
-		Log.info("deleteUserSpreadsheets : " + userId);
+		if(replicationM.isPrimary()) {
+			Log.info("deleteUserSpreadsheets : " + userId);
 
-		if (userId == null || !secret.equals(ReplicationSpreadsheetsServer.serverSecret))
-			throw new WebApplicationException(Status.BAD_REQUEST);
+			if (userId == null || !secret.equals(ReplicationSpreadsheetsServer.serverSecret))
+				throw new WebApplicationException(Status.BAD_REQUEST);
 
-		List<String> userIdSheets = owners.remove(userId);
+			replicationM.deleteUserSpreadsheets(userId, secret);
+			
+			List<String> userIdSheets = owners.remove(userId);
 
-		for (String sheetId : userIdSheets) {
-			spreadsheets.remove(sheetId);
+			for (String sheetId : userIdSheets) {
+				spreadsheets.remove(sheetId);
+			}
+		}
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
 		}
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret) {
+	public String[][] importRange(String sheetId, String userId, String range, String secret) {					//OPERACAO DE LEITURA				
+		if(replicationM.isPrimary()) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
 		if (!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
@@ -441,13 +490,18 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				});
 
 		return cellR.extractRangeValuesFrom(rangeValues);
+		}
+		else {
+			Log.info("Request made to secondary server. Redirecting...");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+		}
 	}
 
-	// OPERACOES
+	// OPERACOES NOS SECUNDARIOS
 
 	@Override
-	public String createSpreadsheetOperation(Spreadsheet sheet, String password) {
-		Log.info("createSpreadsheetOperation : " + sheet + "; pwd = " + password);
+	public String createSpreadsheetOperation(Spreadsheet sheet) {
+		Log.info("createSpreadsheetOperation : " + sheet);
 
 		String sheetID = sheet.getSheetId();
 		
@@ -471,212 +525,34 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void deleteSpreadsheetOperation(String sheetId, String password) {
-		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId + "; pwd = " + password);
-
-		if (sheetId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
-
-		Spreadsheet sheet;
-
-		synchronized (this) {
-			sheet = spreadsheets.get(sheetId);
-
-			// 404
-			checkIfSheetExists(sheet);
-		}
-
-		checkUserPassword(sheet.getOwner(), password);
-
+	public void deleteSpreadsheetOperation(String sheetId) {
+		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId);
 		spreadsheets.remove(sheetId);
 	}
 
 	@Override
-	public Spreadsheet getSpreadsheetOperation(String sheetId, String userId, String password) {
-		Log.info("getSpreadsheetOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
-
-		if (sheetId == null || userId == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
-
-		checkValidUserId(userId);
-
-		checkUserPassword(userId, password);
-
-		Spreadsheet sheet;
+	public void updateCellOperation(String sheetId, String cell, String rawValue) {
+		Log.info("updateCellOperaion : " + cell + "; value = " + rawValue + "; sheet = " + sheetId);
 
 		synchronized (this) {
-
-			sheet = spreadsheets.get(sheetId);
-
-			checkIfSheetExists(sheet);
-
-			Set<String> sharedUsers = sheet.getSharedWith();
-
-			String searchingUser = userId + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
-
-			boolean hasAccess = true;
-
-			if (!sheet.getOwner().equals(userId)) {
-				if (sharedUsers == null || sharedUsers.isEmpty()) {
-					hasAccess = false;
-				} else {
-					if (!sharedUsers.contains(searchingUser)) {
-						hasAccess = false;
-					}
-				}
-			}
-
-			if (!hasAccess) {
-				Log.info("User does not have access to the spreadsheet.");
-				throw new WebApplicationException(Status.FORBIDDEN);
-			}
-		}
-
-		return sheet;
-	}
-
-	@Override
-	public String[][] getSpreadsheetValuesOperation(String sheetId, String userId, String password) {
-		Log.info("getSpreadsheetValuesOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
-
-		if (sheetId == null || userId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
-
-		checkValidUserId(userId);
-
-		String[][] sheetValues;
-
-		Spreadsheet sheet;
-		Set<String> sharedUsers;
-
-		synchronized (this) {
-
-			sheet = spreadsheets.get(sheetId);
-
-			checkIfSheetExists(sheet);
-
-			sharedUsers = sheet.getSharedWith();
-		}
-
-		checkUserPassword(userId, password);
-
-		String sheetOwner = sheet.getOwner();
-
-		String userIdDomain = userId + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
-
-		if (!(sharedUsers.contains(userIdDomain) || sheetOwner.equals(userId))) {
-			Log.info("UserId without access.");
-			throw new WebApplicationException(Status.FORBIDDEN);
-		}
-
-		sheetValues = SpreadsheetEngineImpl.getInstance().computeSpreadsheetValues(new AbstractSpreadsheet() {
-
-			@Override
-			public String sheetId() {
-				return sheet.getSheetId();
-			}
-
-			@Override
-			public int rows() {
-				return sheet.getRows();
-			}
-
-			@Override
-			public int columns() {
-				return sheet.getColumns();
-			}
-
-			@Override
-			public String cellRawValue(int row, int col) {
-				return sheet.getCellRawValue(row, col);
-			}
-
-			@Override
-			public String[][] getRangeValues(String sheetURL, String range) {
-
-				String userIdDomain = sheetOwner + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
-
-				boolean rangeStoredInCache = false;
-
-				if (cache.get(sheetURL) != null) {
-					if (cache.get(sheetURL).get(range) != null) {
-						rangeStoredInCache = true;
-					}
-				}
-
-				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache,
-						ReplicationSpreadsheetsServer.serverSecret);
-
-				if (sheetValues != null) {
-
-					exec.execute(() -> {
-						insertNewValuesInCache(sheetURL, range, sheetValues);
-					});
-				} else {
-					Map<String, String[][]> cachedSheetValues = cache.get(sheetURL);
-					if (cachedSheetValues != null)
-						return cachedSheetValues.get(range);
-				}
-
-				return sheetValues;
-			}
-		});
-
-		return sheetValues;
-	}
-
-	@Override
-	public void updateCellOperation(String sheetId, String cell, String rawValue, String userId, String password) {
-		Log.info("updateCellOperaion : " + cell + "; value = " + rawValue + "; sheet = " + sheetId + "; userId = "
-				+ userId + "; pwd = " + password);
-
-		if (sheetId == null || cell == null || rawValue == null || userId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
-
-		checkUserPassword(userId, password);
-
-		synchronized (this) {
-
 			Spreadsheet sheet = spreadsheets.get(sheetId);
-
 			checkIfSheetExists(sheet);
-
 			sheet.setCellRawValue(cell, rawValue);
 		}
 	}
 
 	@Override
-	public void shareSpreadsheetOperation(String sheetId, String userId, String password) {
-		Log.info("shareSpreadsheetOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
-
-		if (sheetId == null || userId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
-
-		String[] userInfo = userId.split("@");
-
-		String userIdNoDomain = userInfo[0];
-		String domain = userInfo[1];
-
-		setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
-
-		checkValidUserId(userIdNoDomain);
-
-		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
-																				// FOLHAS
+	public void shareSpreadsheetOperation(String sheetId, String userId) {
+		Log.info("shareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
 
 		Spreadsheet sheet;
 		Set<String> sharedUsers;
 
 		synchronized (this) {
-
 			sheet = spreadsheets.get(sheetId);
-
 			checkIfSheetExists(sheet);
-
 			sharedUsers = sheet.getSharedWith();
 		}
-
-		checkUserPassword(sheet.getOwner(), password);
 
 		if (sharedUsers.contains(userId)) {
 			Log.info("Already shared with the user.");
@@ -687,32 +563,15 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void unshareSpreadsheetOperation(String sheetId, String userId, String password) {
-		Log.info("unshareSpreadsheetOperation : " + sheetId + "; userId = " + userId + "; pwd = " + password);
-
-		String[] userInfo = userId.split("@");
-
-		String userIdNoDomain = userInfo[0];
-		String domain = userInfo[1];
-
-		setUsersMiddlemanURI(domain); // MUDAR PARA O DOMINIO DO CLIENTE
-
-		checkValidUserId(userIdNoDomain);
-
-		setUsersMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain); // VOLTAR PARA O DOMINIO DO SERVICO DE
-																				// FOLHAS
-
-		if (sheetId == null || userId == null || password == null)
-			throw new WebApplicationException(Status.BAD_REQUEST);
+	public void unshareSpreadsheetOperation(String sheetId, String userId) {
+		Log.info("unshareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
 
 		Spreadsheet sheet;
 		Set<String> sharedUsers;
 
 		synchronized (this) {
 			sheet = spreadsheets.get(sheetId);
-
 			checkIfSheetExists(sheet);
-
 			sharedUsers = sheet.getSharedWith();
 		}
 
@@ -720,8 +579,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			Log.info("Share not existing.");
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
-
-		checkUserPassword(sheet.getOwner(), password);
 
 		sharedUsers.remove(userId);
 	}
@@ -738,59 +595,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		for (String sheetId : userIdSheets) {
 			spreadsheets.remove(sheetId);
 		}
-	}
-
-	@Override
-	public String[][] importRangeOperation(String sheetId, String userId, String range, String secret) {
-		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
-
-		if (!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
-			throw new WebApplicationException(Status.BAD_REQUEST);
-
-		Spreadsheet sheet = spreadsheets.get(sheetId);
-
-		checkIfSheetExists(sheet);
-
-		if (!sheet.getSharedWith().contains(userId))
-			throw new WebApplicationException(Status.FORBIDDEN);
-
-		CellRange cellR = new CellRange(range);
-
-		String[][] rangeValues = SpreadsheetEngineImpl.getInstance()
-				.computeSpreadsheetValues(new AbstractSpreadsheet() {
-
-					@Override
-					public String sheetId() {
-						return sheet.getSheetId();
-					}
-
-					@Override
-					public int rows() {
-						return sheet.getRows();
-					}
-
-					@Override
-					public int columns() {
-						return sheet.getColumns();
-					}
-
-					@Override
-					public String cellRawValue(int row, int col) {
-						return sheet.getCellRawValue(row, col);
-					}
-
-					@Override
-					public String[][] getRangeValues(String sheetURL, String range) {
-						String userIdDomain = sheet.getOwner() + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
-
-						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-								CLIENT_DEFAULT_RETRIES, ReplicationSpreadsheetsServer.serverSecret);
-
-						return sheetValues;
-					}
-				});
-
-		return cellR.extractRangeValuesFrom(rangeValues);
 	}
 
 	// METODOS PRIVADOS

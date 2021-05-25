@@ -11,13 +11,21 @@ import org.apache.zookeeper.ZooKeeper;
 
 public class ZookeeperProcessor implements Watcher {
 	private ZooKeeper zk;
+	private static ZookeeperProcessor instance;
 
+	synchronized public static ZookeeperProcessor getInstance(String hostPort) throws Exception {
+		if(instance == null) {
+			instance = new ZookeeperProcessor(hostPort);
+		}
+		
+		return instance;
+	}
+	
 	/**
 	 * @param  serviceName the name of the service to announce
 	 */
 	public ZookeeperProcessor( String hostPort) throws Exception {
 		zk = new ZooKeeper(hostPort, 3000, this);
-
 	}
 	
 	public String write( String path, CreateMode mode) {
