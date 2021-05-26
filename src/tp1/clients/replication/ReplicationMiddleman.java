@@ -1,4 +1,4 @@
-package tp1.clients.rest;
+package tp1.clients.replication;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -344,39 +344,43 @@ public class ReplicationMiddleman {
 		String znodePath = zk.write(serverZNode, ReplicationSpreadsheetsServer.serverURL,
 				CreateMode.EPHEMERAL_SEQUENTIAL);
 		System.out.println("Created child znode: " + znodePath);
-
+		
+		//LISTA COM ELEMENTOS COMO replica_00000000000000
 		List<String> existingZnodes = zk.getChildren(domainZNode, new Watcher() {
 			@Override
 			public void process(WatchedEvent event) {
 				List<String> existingZNodes = zk.getChildren(domainZNode, this);
 				// ELEGER O PRIMARIO QUANDO HOUVER ALTERACOES
-				primaryServerElection(znodePath, existingZNodes);
+				primaryServerElection(domainZNode, znodePath, existingZNodes);
 			}
 
 		});
 
 		// ELEGER O PRIMARIO QUANDO A CLASSE E INICIALIZADA
-		primaryServerElection(znodePath, existingZnodes);
+		primaryServerElection(domainZNode, znodePath, existingZnodes);
 	}
 
-	private void primaryServerElection(String serverZNode, List<String> existingZNodes) {
+	private void primaryServerElection(String domainZNode, String serverZNodePath, List<String> existingZNodes) {
 		existingServers = new LinkedList<String>();
 
 		String primaryServerNode = existingZNodes.get(0);
+		String primaryServerNodePath = domainZNode + "/" + primaryServerNode;
 
 		for (String znode : existingZNodes) {
-			String znodeURL = zk.getValue(znode);
+			String znodePath = domainZNode + "/" + znode;
+			String znodeURL = zk.getValue(znodePath);
 
 			if (primaryServerNode.compareTo(znode) > 0) {
 				primaryServerNode = znode;
 				primaryServerURL = znodeURL;
+				primaryServerNodePath = znodePath;
 			}
 
 			// OBTER OS URLS QUANDO OCORREM ALTERACOES OFERECE MELHOR DESEMPENHO
 			existingServers.add(znodeURL);
 		}
 
-		if (primaryServerNode.equals(serverZNode)) {
+		if (primaryServerNodePath.equals(serverZNodePath)) {
 			primaryServer = true;
 		} else {
 			primaryServer = false;

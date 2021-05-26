@@ -22,7 +22,7 @@ import tp1.api.Spreadsheet;
 import tp1.api.engine.AbstractSpreadsheet;
 import tp1.api.service.rest.ReplicationRestSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
-import tp1.clients.rest.ReplicationMiddleman;
+import tp1.clients.replication.ReplicationMiddleman;
 import tp1.clients.rest.SheetsMiddleman;
 import tp1.clients.rest.UsersMiddleman;
 import tp1.impl.engine.SpreadsheetEngineImpl;
