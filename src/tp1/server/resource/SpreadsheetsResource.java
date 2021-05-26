@@ -130,7 +130,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password) {
+	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, int version) {
 		Log.info("getSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 		if (sheetId == null || userId == null)
@@ -174,7 +174,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] getSpreadsheetValues(String sheetId, String userId, String password) {
+	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, int version) {
 		Log.info("getSpreadsheetValues : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 		if (sheetId == null || userId == null || password == null)
@@ -397,7 +397,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret) {
+	public String[][] importRange(String sheetId, String userId, String range, String secret, int version) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
 		if(!secret.equals(SpreadsheetsServer.serverSecret))

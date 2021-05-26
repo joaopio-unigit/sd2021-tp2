@@ -11,6 +11,8 @@ import org.glassfish.jersey.jdkhttp.JdkHttpServerFactory;
 import org.glassfish.jersey.server.ResourceConfig;
 
 import tp1.impl.GenericExceptionMapper;
+import tp1.replication.ReplicationManager;
+import tp1.replication.VersionFilter;
 import tp1.server.resource.replication.ReplicationSpreadsheetsResource;
 import tp1.util.Discovery;
 import tp1.util.InsecureHostnameVerifier;
@@ -45,9 +47,12 @@ public class ReplicationSpreadsheetsServer {
 		//HTTPS
 		serverURL = String.format("https://%s:%s/rest", ip, PORT);
 		
+		ReplicationManager replicationM = ReplicationManager.getInstance();										//REPLICATION
+		
 		ResourceConfig config = new ResourceConfig();
 		config.register(ReplicationSpreadsheetsResource.class);
 		config.register(new GenericExceptionMapper());
+		config.register(new VersionFilter(replicationM));														//REPLICATION
 		
 		JdkHttpServerFactory.createHttpServer( URI.create(serverURL), config, SSLContext.getDefault());
 	

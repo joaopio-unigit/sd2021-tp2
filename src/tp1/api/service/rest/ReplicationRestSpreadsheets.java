@@ -2,6 +2,7 @@ package tp1.api.service.rest;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -12,7 +13,7 @@ import jakarta.ws.rs.core.MediaType;
 import tp1.api.Spreadsheet;
 
 public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
-
+	
 	public static final String DELETESHEETS = "/deleteSheets";
 	public static final String OPERATION = "/operation";
 	
@@ -28,7 +29,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	@Path(OPERATION)
 	@Consumes(MediaType.APPLICATION_JSON)
 	@Produces(MediaType.APPLICATION_JSON)
-	String createSpreadsheetOperation(Spreadsheet sheet);
+	String createSpreadsheetOperation(Spreadsheet sheet, @HeaderParam(HEADER_VERSION) int version);
 
 	/**
 	 * Deletes a spreadsheet.  Only the owner can call this method.
@@ -42,7 +43,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@DELETE
 	@Path("/{sheetId}" + OPERATION)
-	void deleteSpreadsheetOperation(@PathParam("sheetId") String sheetId);
+	void deleteSpreadsheetOperation(@PathParam("sheetId") String sheetId, @HeaderParam(HEADER_VERSION) int version);
 		
 	/**
 	 * Updates the raw values of some cells of a spreadsheet. 
@@ -61,7 +62,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	@PUT
 	@Path("/{sheetId}/{cell}" + OPERATION)
 	@Consumes(MediaType.APPLICATION_JSON)
-	void updateCellOperation( @PathParam("sheetId") String sheetId, @PathParam("cell") String cell, String rawValue);
+	void updateCellOperation( @PathParam("sheetId") String sheetId, @PathParam("cell") String cell, String rawValue, @HeaderParam(HEADER_VERSION) int version);
 	
 	/**
 	 * Adds a new user to the list of shares of a spreadsheet. Only the owner can call this method.
@@ -79,7 +80,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@POST
 	@Path("/{sheetId}/share/{userId}" + OPERATION)
-	void shareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId);
+	void shareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId, @HeaderParam(HEADER_VERSION) int version);
 	
 	/**
 	 * Removes a user from the list of shares of a spreadsheet. Only the owner can call this method.
@@ -95,7 +96,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@DELETE
 	@Path("/{sheetId}/share/{userId}" + OPERATION)
-	void unshareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId);
+	void unshareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId, @HeaderParam(HEADER_VERSION) int version);
 	
 	/**
 	 * Removes all the Spreadsheets from the service that belong to the userId
@@ -107,5 +108,5 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@DELETE
 	@Path(DELETESHEETS + "/{userId}" + OPERATION)
-	void deleteUserSpreadsheetsOperation(@PathParam("userId") String userId, @QueryParam("secret") String secret);
+	void deleteUserSpreadsheetsOperation(@PathParam("userId") String userId, @QueryParam("secret") String secret, @HeaderParam(HEADER_VERSION) int version);
 }

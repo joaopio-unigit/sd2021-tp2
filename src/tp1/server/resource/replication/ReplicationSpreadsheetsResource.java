@@ -22,10 +22,17 @@ import tp1.api.Spreadsheet;
 import tp1.api.engine.AbstractSpreadsheet;
 import tp1.api.service.rest.ReplicationRestSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
-import tp1.clients.replication.ReplicationMiddleman;
 import tp1.clients.rest.SheetsMiddleman;
 import tp1.clients.rest.UsersMiddleman;
 import tp1.impl.engine.SpreadsheetEngineImpl;
+import tp1.replication.ReplicationManager;
+import tp1.replication.tasks.CreateSpreadsheetTask;
+import tp1.replication.tasks.DeleteSpreadsheetTask;
+import tp1.replication.tasks.DeleteUserSpreadsheetsTask;
+import tp1.replication.tasks.ShareSpreadsheetTask;
+import tp1.replication.tasks.Task;
+import tp1.replication.tasks.UnshareSpreadsheetTask;
+import tp1.replication.tasks.UpdateCellTask;
 import tp1.server.rest.replication.ReplicationSpreadsheetsServer;
 import tp1.server.rest.UsersServer;
 import tp1.util.CellRange;
@@ -48,11 +55,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	private UsersMiddleman usersM;
 	private SheetsMiddleman sheetsM;
 
-	private ReplicationMiddleman replicationM;
+	private ReplicationManager replicationM;
+	private int localVersionNumber;
 
 	public ReplicationSpreadsheetsResource() {
-
-		System.out.println("A INICIAR O RESOURCE");
 
 		spreadsheets = new HashMap<String, Spreadsheet>();
 		owners = new HashMap<String, List<String>>();
@@ -66,12 +72,13 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		sheetsM = new SheetsMiddleman();
 		setSheetsMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain);
 
-		replicationM = ReplicationMiddleman.getInstance();
+		replicationM = ReplicationManager.getInstance();
+		localVersionNumber = 0;
 	}
 
 	@Override
-	public String createSpreadsheet(Spreadsheet sheet, String password) {
-		if (replicationM.isPrimary()) {
+	public String createSpreadsheet(Spreadsheet sheet, String password) { // OPERACAO DE ESCRITA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("createSpreadsheet : " + sheet + "; pwd = " + password);
 
 			if (sheet == null || password == null)
@@ -96,8 +103,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				sheet.setSheetId(sheetID);
 
 				// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-				replicationM.createSpreadsheet(sheet, password);
-				
+				replicationM.createSpreadsheet(sheet);
+
 				String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
 				sheet.setSheetURL(sheetURL);
 				spreadsheets.put(sheetID, sheet);
@@ -108,6 +115,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 					owners.put(sheetOwner, sheetOwnerSheets);
 				}
 				sheetOwnerSheets.add(sheetID);
+
+				updateLocalVersionNumber();
 
 				return sheetID;
 			} else {
@@ -122,8 +131,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void deleteSpreadsheet(String sheetId, String password) {
-		if (replicationM.isPrimary()) {
+	public void deleteSpreadsheet(String sheetId, String password) { // OPERACAO DE ESCRITA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("deleteSpreadsheet : sheet = " + sheetId + "; pwd = " + password);
 
 			if (sheetId == null || password == null)
@@ -140,8 +149,12 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			checkUserPassword(sheet.getOwner(), password);
 
+			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			replicationM.deleteSpreadsheet(sheetId);
+
 			spreadsheets.remove(sheetId);
+
+			updateLocalVersionNumber();
 		} else {
 			Log.info("Request made to secondary server. Redirecting...");
 			throw new WebApplicationException(
@@ -150,8 +163,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password) { // OPERACAO DE LEITURA
-		if (replicationM.isPrimary()) {
+	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, int version) { // OPERACAO DE LEITURA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
 			Log.info("getSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 			if (sheetId == null || userId == null)
@@ -200,8 +213,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public String[][] getSpreadsheetValues(String sheetId, String userId, String password) { // OPERACAO DE LEITURA
-		if (replicationM.isPrimary()) {
+	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, int version) { // OPERACAO DE LEITURA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
 			Log.info("getSpreadsheetValues : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 			if (sheetId == null || userId == null || password == null)
@@ -296,8 +309,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void updateCell(String sheetId, String cell, String rawValue, String userId, String password) {
-		if (replicationM.isPrimary()) {
+	public void updateCell(String sheetId, String cell, String rawValue, String userId, String password) { // OPERACAO DE ESCRITA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("updateCell : " + cell + "; value = " + rawValue + "; sheet = " + sheetId + "; userId = " + userId
 					+ "; pwd = " + password);
 
@@ -315,8 +328,12 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				checkIfSheetExists(sheet);
 			}
 
+			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			replicationM.updateCell(sheetId, cell, rawValue);
+
 			sheet.setCellRawValue(cell, rawValue);
+
+			updateLocalVersionNumber();
 		} else {
 			Log.info("Request made to secondary server. Redirecting...");
 			throw new WebApplicationException(
@@ -325,8 +342,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void shareSpreadsheet(String sheetId, String userId, String password) {
-		if (replicationM.isPrimary()) {
+	public void shareSpreadsheet(String sheetId, String userId, String password) { // OPERACAO DE ESCRITA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("shareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 			if (sheetId == null || userId == null || password == null)
@@ -363,8 +380,12 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				throw new WebApplicationException(Status.CONFLICT);
 			}
 
+			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			replicationM.shareSpreadsheet(sheetId, userId);
+
 			sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
+
+			updateLocalVersionNumber();
 		} else {
 			Log.info("Request made to secondary server. Redirecting...");
 			throw new WebApplicationException(
@@ -373,8 +394,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void unshareSpreadsheet(String sheetId, String userId, String password) {
-		if (replicationM.isPrimary()) {
+	public void unshareSpreadsheet(String sheetId, String userId, String password) { // OPERACAO DE ESCRITA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("unshareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 			if (sheetId == null || userId == null || password == null)
@@ -408,9 +429,12 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 
 			checkUserPassword(sheet.getOwner(), password);
-
+			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			replicationM.unshareSpreadsheet(sheetId, userId);
+
 			sharedUsers.remove(userId);
+
+			updateLocalVersionNumber();
 		} else {
 			Log.info("Request made to secondary server. Redirecting...");
 			throw new WebApplicationException(
@@ -419,13 +443,14 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void deleteUserSpreadsheets(String userId, String secret) {
-		if (replicationM.isPrimary()) {
+	public void deleteUserSpreadsheets(String userId, String secret) { // OPERACAO DE ESCRITA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("deleteUserSpreadsheets : " + userId);
 
 			if (userId == null || !secret.equals(ReplicationSpreadsheetsServer.serverSecret))
 				throw new WebApplicationException(Status.BAD_REQUEST);
 
+			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			replicationM.deleteUserSpreadsheets(userId, secret);
 
 			List<String> userIdSheets = owners.remove(userId);
@@ -433,6 +458,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			for (String sheetId : userIdSheets) {
 				spreadsheets.remove(sheetId);
 			}
+
+			updateLocalVersionNumber();
 		} else {
 			Log.info("Request made to secondary server. Redirecting...");
 			throw new WebApplicationException(
@@ -441,8 +468,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret) { // OPERACAO DE LEITURA
-		if (replicationM.isPrimary()) {
+	public String[][] importRange(String sheetId, String userId, String range, String secret, int version) { // OPERACAO DE LEITURA
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
 			Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
 			if (!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
@@ -503,7 +530,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	// OPERACOES NOS SECUNDARIOS
 
 	@Override
-	public String createSpreadsheetOperation(Spreadsheet sheet) {
+	public String createSpreadsheetOperation(Spreadsheet sheet, int version) {
+		checkForUpdates(version);
+
 		Log.info("createSpreadsheetOperation : " + sheet);
 
 		String sheetID = sheet.getSheetId();
@@ -524,17 +553,27 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 		sheetOwnerSheets.add(sheetID);
 
+		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
+		updateLocalVersionNumber();
+
 		return sheetID;
 	}
 
 	@Override
-	public void deleteSpreadsheetOperation(String sheetId) {
+	public void deleteSpreadsheetOperation(String sheetId, int version) {
+		checkForUpdates(version);
+
 		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId);
 		spreadsheets.remove(sheetId);
+
+		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
+		updateLocalVersionNumber();
 	}
 
 	@Override
-	public void updateCellOperation(String sheetId, String cell, String rawValue) {
+	public void updateCellOperation(String sheetId, String cell, String rawValue, int version) {
+		checkForUpdates(version);
+
 		Log.info("updateCellOperaion : " + cell + "; value = " + rawValue + "; sheet = " + sheetId);
 
 		synchronized (this) {
@@ -542,10 +581,15 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			checkIfSheetExists(sheet);
 			sheet.setCellRawValue(cell, rawValue);
 		}
+
+		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
+		updateLocalVersionNumber();
 	}
 
 	@Override
-	public void shareSpreadsheetOperation(String sheetId, String userId) {
+	public void shareSpreadsheetOperation(String sheetId, String userId, int version) {
+		checkForUpdates(version);
+
 		Log.info("shareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
 
 		Spreadsheet sheet;
@@ -563,10 +607,14 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		}
 
 		sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
+		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
+		updateLocalVersionNumber();
 	}
 
 	@Override
-	public void unshareSpreadsheetOperation(String sheetId, String userId) {
+	public void unshareSpreadsheetOperation(String sheetId, String userId, int version) {
+		checkForUpdates(version);
+
 		Log.info("unshareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
 
 		Spreadsheet sheet;
@@ -584,10 +632,14 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		}
 
 		sharedUsers.remove(userId);
+		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
+		updateLocalVersionNumber();
 	}
 
 	@Override
-	public void deleteUserSpreadsheetsOperation(String userId, String secret) {
+	public void deleteUserSpreadsheetsOperation(String userId, String secret, int version) {
+		checkForUpdates(version);
+
 		Log.info("deleteUserSpreadsheetsOperation : " + userId);
 
 		if (userId == null || !secret.equals(ReplicationSpreadsheetsServer.serverSecret))
@@ -598,6 +650,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		for (String sheetId : userIdSheets) {
 			spreadsheets.remove(sheetId);
 		}
+
+		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
+		updateLocalVersionNumber();
 	}
 
 	// METODOS PRIVADOS
@@ -675,4 +730,57 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		}
 	}
 
+	// GESTAO DE VERSAO
+
+	synchronized private void updateLocalVersionNumber() {
+		localVersionNumber++;
+	}
+
+	private void checkForUpdates(int receivedVersion) {
+		if (receivedVersion > localVersionNumber) {
+			List<Task> missingTasks = replicationM.getMissingTasks(localVersionNumber);
+			executeTasks(missingTasks);
+		}
+	}
+
+	// COISAS POR FAZER AQUI "POR FAZER"
+	private void executeTasks(List<Task> missingTasks) {
+		for (Task task : missingTasks) {
+			Tasks taskType = Tasks.valueOf(task.getClass().getSimpleName());
+			switch (taskType) {
+			case CreateSpreadsheetTask:
+				CreateSpreadsheetTask cTask = (CreateSpreadsheetTask) task;
+				createSpreadsheetOperation(cTask.getSpreadsheet(), localVersionNumber);
+				break;
+			case DeleteSpreadsheetTask:
+				DeleteSpreadsheetTask dTask = (DeleteSpreadsheetTask) task;
+				deleteSpreadsheetOperation(dTask.getSheetId(), localVersionNumber);
+				break;
+			case DeleteUserSpreadsheetsTask:
+				DeleteUserSpreadsheetsTask dUTask = (DeleteUserSpreadsheetsTask) task;
+				deleteUserSpreadsheetsOperation(dUTask.getUserId(), "POR FAZER", localVersionNumber);
+				break;
+			case ShareSpreadsheetTask:
+				ShareSpreadsheetTask sTask = (ShareSpreadsheetTask) task;
+				shareSpreadsheetOperation(sTask.getSheetId(), sTask.getUserId(), localVersionNumber);
+				break;
+			case UnshareSpreadsheetTask:
+				UnshareSpreadsheetTask uTask = (UnshareSpreadsheetTask) task;
+				unshareSpreadsheetOperation(uTask.getSheetId(), uTask.getUserId(), localVersionNumber);
+				break;
+			case UpdateCellTask:
+				UpdateCellTask upTask = (UpdateCellTask) task;
+				updateCellOperation(upTask.getSheetId(), upTask.getCell(), upTask.getRawValue(), localVersionNumber);
+				break;
+			default:
+				System.out.println("Type of task not recognized");
+				break;
+			}
+		}
+	}
+
+	private enum Tasks {
+		CreateSpreadsheetTask, DeleteSpreadsheetTask, DeleteUserSpreadsheetsTask, ShareSpreadsheetTask,
+		UnshareSpreadsheetTask, UpdateCellTask;
+	}
 }
