@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
+import java.util.concurrent.atomic.*;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -42,7 +43,8 @@ public class ReplicationManager {
 	private final static int REPLY_TIMEOUT = 1000;
 	private static final String ZOO_ERROR = "Error on instantiating Zookeeper.";
 	private static final String ZOOKEEPER_HOSTPORT = "localhost:2181,kafka:2181";
-
+	private static final AtomicLong counter = new AtomicLong(0L);
+	
 	private static Logger Log = Logger.getLogger(ReplicationManager.class.getName());
 
 	private static ReplicationManager instance;

@@ -17,9 +17,8 @@ public class VersionFilter implements ContainerResponseFilter {
     }
 
     @Override
-    public void filter(ContainerRequestContext request, ContainerResponseContext response) 											//COMO UTILIZAR??
+    public void filter(ContainerRequestContext request, ContainerResponseContext response)
                 throws IOException {
     	response.getHeaders().add(ReplicationRestSpreadsheets.HEADER_VERSION, replicationM.getGlobalSequenceNumber());
     }
-
 }
