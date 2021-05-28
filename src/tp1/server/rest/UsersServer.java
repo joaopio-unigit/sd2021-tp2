@@ -47,7 +47,7 @@ public class UsersServer {
 
 		//HTTP
 		String serverURI = String.format("https://%s:%s/rest", ip, PORT);
-		JdkHttpServerFactory.createHttpServer( URI.create(serverURI.replace(ip, "0.0.0.0")), config, SSLContext.getDefault());
+		JdkHttpServerFactory.createHttpServer(  URI.create(serverURI), config, SSLContext.getDefault());
 	
 		Log.info(String.format("%s Server ready @ %s\n",  SERVICE, serverURI));
 			
