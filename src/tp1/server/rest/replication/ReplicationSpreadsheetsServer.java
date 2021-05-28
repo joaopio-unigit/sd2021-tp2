@@ -49,20 +49,19 @@ public class ReplicationSpreadsheetsServer {
 		
 		ReplicationManager replicationM = ReplicationManager.getInstance();										//REPLICATION
 		
+		String serviceName = spreadsheetsDomain + ":" + SERVICE;
+		sheetsDiscovery = new Discovery(serviceName, serverURL, Discovery.DEFAULT);								//CRIAR O OBJETO DISCOVERY
+		
+		sheetsDiscovery.start();																				//COMECAR A ANUNCIAR O SERVICO
+
 		ResourceConfig config = new ResourceConfig();
-		config.register(ReplicationSpreadsheetsResource.class);
+		config.register(new ReplicationSpreadsheetsResource());
 		config.register(new GenericExceptionMapper());
 		config.register(new VersionFilter(replicationM));														//REPLICATION
 		
 		JdkHttpServerFactory.createHttpServer( URI.create(serverURL), config, SSLContext.getDefault());
 	
-		Log.info(String.format("%s Server ready @ %s\n",  SERVICE, serverURL));
-				
-		String serviceName = spreadsheetsDomain + ":" + SERVICE;
-		
-		sheetsDiscovery = new Discovery(serviceName, serverURL, Discovery.DEFAULT);								//CRIAR O OBJETO DISCOVERY
-
-		sheetsDiscovery.start();																				//COMECAR A ANUNCIAR O SERVICO
+		Log.info(String.format("%s Server ready @ %s\n",  SERVICE, serverURL));	
 				
 		//More code can be executed here...
 		} catch( Exception e) {

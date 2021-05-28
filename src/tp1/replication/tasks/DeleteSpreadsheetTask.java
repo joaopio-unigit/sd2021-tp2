@@ -4,8 +4,7 @@ public class DeleteSpreadsheetTask extends Task {
 
 	private String sheetId;
 	
-	public DeleteSpreadsheetTask(int sequenceNumber, String sheetId) {
-		super(sequenceNumber);
+	public DeleteSpreadsheetTask(String sheetId) {
 		this.sheetId = sheetId;
 	}
 

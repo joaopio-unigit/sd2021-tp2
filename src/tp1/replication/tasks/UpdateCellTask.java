@@ -4,8 +4,7 @@ public class UpdateCellTask extends Task{
 
 	private String sheetId, cell, rawValue;
 	
-	public UpdateCellTask(int sequenceNumber, String sheetId, String cell, String rawValue) {
-		super(sequenceNumber);
+	public UpdateCellTask(String sheetId, String cell, String rawValue) {
 		this.sheetId = sheetId;
 		this.cell = cell;
 		this.rawValue = rawValue;

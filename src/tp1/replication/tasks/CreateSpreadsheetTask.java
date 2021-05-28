@@ -7,8 +7,7 @@ public class CreateSpreadsheetTask extends Task{
 	private Spreadsheet sheet;
 	
 	
-	public CreateSpreadsheetTask(int sequenceNumber, Spreadsheet sheet) {
-		super(sequenceNumber);
+	public CreateSpreadsheetTask(Spreadsheet sheet) {
 		this.sheet = sheet;
 	}
 

@@ -26,6 +26,7 @@ import tp1.clients.rest.SheetsMiddleman;
 import tp1.clients.rest.UsersMiddleman;
 import tp1.impl.engine.SpreadsheetEngineImpl;
 import tp1.replication.ReplicationManager;
+import tp1.replication.Tasks;
 import tp1.replication.tasks.CreateSpreadsheetTask;
 import tp1.replication.tasks.DeleteSpreadsheetTask;
 import tp1.replication.tasks.DeleteUserSpreadsheetsTask;
@@ -56,7 +57,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	private SheetsMiddleman sheetsM;
 
 	private ReplicationManager replicationM;
-	private int localVersionNumber;
+	private Long localVersionNumber;
 
 	public ReplicationSpreadsheetsResource() {
 
@@ -73,7 +74,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		setSheetsMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain);
 
 		replicationM = ReplicationManager.getInstance();
-		localVersionNumber = 0;
+		replicationM.startZookeeper();
+		localVersionNumber = 0L;
 	}
 
 	@Override
@@ -103,7 +105,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				sheet.setSheetId(sheetID);
 
 				// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-				replicationM.createSpreadsheet(sheet);
+				replicationM.newTask(new CreateSpreadsheetTask(sheet));
 
 				String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
 				sheet.setSheetURL(sheetURL);
@@ -113,6 +115,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				if (sheetOwnerSheets == null) {
 					sheetOwnerSheets = new ArrayList<String>();
 					owners.put(sheetOwner, sheetOwnerSheets);
+					
 				}
 				sheetOwnerSheets.add(sheetID);
 
@@ -150,8 +153,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			checkUserPassword(sheet.getOwner(), password);
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.deleteSpreadsheet(sheetId);
-
+			replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
+			
 			spreadsheets.remove(sheetId);
 
 			updateLocalVersionNumber();
@@ -163,7 +166,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, int version) { // OPERACAO DE LEITURA
+	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, Long version) { // OPERACAO DE LEITURA
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
 			Log.info("getSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
@@ -213,7 +216,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, int version) { // OPERACAO DE LEITURA
+	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, Long version) { // OPERACAO DE LEITURA
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
 			Log.info("getSpreadsheetValues : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
@@ -329,7 +332,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.updateCell(sheetId, cell, rawValue);
+			replicationM.newTask(new UpdateCellTask(sheetId, cell, rawValue));
 
 			sheet.setCellRawValue(cell, rawValue);
 
@@ -381,7 +384,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.shareSpreadsheet(sheetId, userId);
+			replicationM.newTask(new ShareSpreadsheetTask(sheetId, userId));
+
 
 			sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
 
@@ -430,7 +434,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			checkUserPassword(sheet.getOwner(), password);
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.unshareSpreadsheet(sheetId, userId);
+			replicationM.newTask(new UnshareSpreadsheetTask(sheetId, userId));
 
 			sharedUsers.remove(userId);
 
@@ -451,7 +455,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				throw new WebApplicationException(Status.BAD_REQUEST);
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.deleteUserSpreadsheets(userId, secret);
+			replicationM.newTask(new DeleteUserSpreadsheetsTask(userId));
 
 			List<String> userIdSheets = owners.remove(userId);
 
@@ -468,7 +472,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret, int version) { // OPERACAO DE LEITURA
+	public String[][] importRange(String sheetId, String userId, String range, String secret, Long version) { // OPERACAO DE LEITURA
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
 			Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
@@ -530,7 +534,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	// OPERACOES NOS SECUNDARIOS
 
 	@Override
-	public String createSpreadsheetOperation(Spreadsheet sheet, int version) {
+	public String createSpreadsheetOperation(Spreadsheet sheet, Long version) {
 		checkForUpdates(version);
 
 		Log.info("createSpreadsheetOperation : " + sheet);
@@ -560,7 +564,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void deleteSpreadsheetOperation(String sheetId, int version) {
+	public void deleteSpreadsheetOperation(String sheetId, Long version) {
 		checkForUpdates(version);
 
 		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId);
@@ -571,7 +575,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void updateCellOperation(String sheetId, String cell, String rawValue, int version) {
+	public void updateCellOperation(String sheetId, String cell, String rawValue, Long version) {
 		checkForUpdates(version);
 
 		Log.info("updateCellOperaion : " + cell + "; value = " + rawValue + "; sheet = " + sheetId);
@@ -587,7 +591,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void shareSpreadsheetOperation(String sheetId, String userId, int version) {
+	public void shareSpreadsheetOperation(String sheetId, String userId, Long version) {
 		checkForUpdates(version);
 
 		Log.info("shareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
@@ -612,7 +616,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void unshareSpreadsheetOperation(String sheetId, String userId, int version) {
+	public void unshareSpreadsheetOperation(String sheetId, String userId, Long version) {
 		checkForUpdates(version);
 
 		Log.info("unshareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
@@ -637,13 +641,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void deleteUserSpreadsheetsOperation(String userId, String secret, int version) {
+	public void deleteUserSpreadsheetsOperation(String userId, Long version) {
 		checkForUpdates(version);
 
 		Log.info("deleteUserSpreadsheetsOperation : " + userId);
-
-		if (userId == null || !secret.equals(ReplicationSpreadsheetsServer.serverSecret))
-			throw new WebApplicationException(Status.BAD_REQUEST);
 
 		List<String> userIdSheets = owners.remove(userId);
 
@@ -655,6 +656,11 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		updateLocalVersionNumber();
 	}
 
+	@Override
+	public void primaryNodeNotification(Long lastestVersion) {
+		checkForUpdates(lastestVersion);
+	}
+	
 	// METODOS PRIVADOS
 
 	private void setUsersMiddlemanURI(String domain) {
@@ -736,14 +742,13 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		localVersionNumber++;
 	}
 
-	private void checkForUpdates(int receivedVersion) {
+	private void checkForUpdates(Long receivedVersion) {
 		if (receivedVersion > localVersionNumber) {
 			List<Task> missingTasks = replicationM.getMissingTasks(localVersionNumber);
 			executeTasks(missingTasks);
 		}
 	}
 
-	// COISAS POR FAZER AQUI "POR FAZER"
 	private void executeTasks(List<Task> missingTasks) {
 		for (Task task : missingTasks) {
 			Tasks taskType = Tasks.valueOf(task.getClass().getSimpleName());
@@ -758,7 +763,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				break;
 			case DeleteUserSpreadsheetsTask:
 				DeleteUserSpreadsheetsTask dUTask = (DeleteUserSpreadsheetsTask) task;
-				deleteUserSpreadsheetsOperation(dUTask.getUserId(), "POR FAZER", localVersionNumber);
+				deleteUserSpreadsheetsOperation(dUTask.getUserId(), localVersionNumber);
 				break;
 			case ShareSpreadsheetTask:
 				ShareSpreadsheetTask sTask = (ShareSpreadsheetTask) task;
@@ -778,9 +783,5 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 		}
 	}
-
-	private enum Tasks {
-		CreateSpreadsheetTask, DeleteSpreadsheetTask, DeleteUserSpreadsheetsTask, ShareSpreadsheetTask,
-		UnshareSpreadsheetTask, UpdateCellTask;
-	}
+	
 }

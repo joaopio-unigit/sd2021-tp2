@@ -86,7 +86,7 @@ public class Discovery {
 			ms.joinGroup(addr, NetworkInterface.getByInetAddress(InetAddress.getLocalHost()));
 				
 			if(mode == DEFAULT){
-				Log.info(String.format("Starting Discovery announcements on: %s for: %s -> %s", addr, serviceName, serviceURI));
+				Log.info(String.format("Starting Discovery announcements on: %s for: %s -> %s\n", addr, serviceName, serviceURI));
 
 				// start thread to send periodic announcements
 				new Thread(() -> {

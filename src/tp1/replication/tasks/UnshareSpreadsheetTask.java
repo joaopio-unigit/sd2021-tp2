@@ -5,8 +5,7 @@ public class UnshareSpreadsheetTask extends Task {
 	private String sheetId;
 	private String userId;
 	
-	public UnshareSpreadsheetTask(int sequenceNumber, String sheetId, String userId) {
-		super(sequenceNumber);
+	public UnshareSpreadsheetTask(String sheetId, String userId) {
 		this.sheetId = sheetId;
 		this.userId = userId;
 	}

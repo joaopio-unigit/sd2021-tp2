@@ -3,9 +3,9 @@ package tp1.replication.tasks;
 public class DeleteUserSpreadsheetsTask extends Task{
 
 	private String userId;
+	
 
-	public DeleteUserSpreadsheetsTask(int sequenceNumber, String userId) {
-		super(sequenceNumber);
+	public DeleteUserSpreadsheetsTask(String userId) {
 		this.userId = userId;
 	}
 	

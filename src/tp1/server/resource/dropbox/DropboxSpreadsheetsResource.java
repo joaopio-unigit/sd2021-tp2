@@ -124,7 +124,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, int version) {
+	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, Long version) {
 		Log.info("getSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 		if (sheetId == null || userId == null)
@@ -170,7 +170,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, int version) {
+	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, Long version) {
 		Log.info("getSpreadsheetValues : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 		if (sheetId == null || userId == null || password == null)
@@ -380,7 +380,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret, int version) {
+	public String[][] importRange(String sheetId, String userId, String range, String secret, Long version) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
 		if(!secret.equals(DropboxSpreadsheetsServer.serverSecret))

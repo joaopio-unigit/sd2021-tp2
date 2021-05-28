@@ -67,7 +67,7 @@ public interface RestSpreadsheets {
 	@Path("/{sheetId}")
 	@Produces(MediaType.APPLICATION_JSON)
 	Spreadsheet getSpreadsheet(@PathParam("sheetId") String sheetId , @QueryParam("userId") String userId, 
-			@QueryParam("password") String password, @HeaderParam(HEADER_VERSION) int version);
+			@QueryParam("password") String password, @HeaderParam(HEADER_VERSION) Long version);
 		
 	
 	/**
@@ -85,7 +85,7 @@ public interface RestSpreadsheets {
 	@Path("/{sheetId}/values")
 	@Produces(MediaType.APPLICATION_JSON)
 	String[][] getSpreadsheetValues(@PathParam("sheetId") String sheetId, 
-			@QueryParam("userId") String userId, @QueryParam("password") String password, @HeaderParam(HEADER_VERSION) int version);
+			@QueryParam("userId") String userId, @QueryParam("password") String password, @HeaderParam(HEADER_VERSION) Long version);
 
 
 	/**
@@ -173,5 +173,5 @@ public interface RestSpreadsheets {
 	@GET
 	@Path("/{sheetId}/{userId}/{range}")
 	String[][] importRange(@PathParam("sheetId") String sheetId, @PathParam("userId") String userId,
-			@PathParam("range") String range, @QueryParam("secret") String secret, @HeaderParam(HEADER_VERSION) int version);
+			@PathParam("range") String range, @QueryParam("secret") String secret, @HeaderParam(HEADER_VERSION) Long version);
 }
