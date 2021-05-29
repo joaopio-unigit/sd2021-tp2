@@ -7,6 +7,8 @@ import javax.net.ssl.HttpsURLConnection;
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
 
+import com.google.gson.Gson;
+
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
@@ -15,6 +17,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 import tp1.api.service.rest.RestSpreadsheets;
+import tp1.google.replies.GoogleSheetsReturn;
 import tp1.util.InsecureHostnameVerifier;
 
 public class SheetsMiddleman {
@@ -23,24 +26,24 @@ public class SheetsMiddleman {
 	private final static long RETRY_PERIOD = 10000;
 	private final static int CONNECTION_TIMEOUT = 10000;
 	private final static int REPLY_TIMEOUT = 1000;
-	private final static String REQUEST = "Making a request to " ;
+	private final static String REQUEST = "Making a request to ";
 	private final static String TIMEOUT = "Connection timeout!!";
 	private final static String RETRY_CONNECTION = "Retrying to connect.";
-	
-	/* GOOGLE
+
 	private static final String GOOGLE_SHEETS_API_KEY = "AIzaSyDan0PpAHPQh0eEQ2NDc6qf1QxdzOzWVsg";
 	private static final String GOOGLE_SHEETS_PATH = "https://sheets.googleapis.com/v4/spreadsheets/";
 	private static final String VALUES = "/values";
 	private static final String KEY_PARAM = "key";
 	private static final String GOOGLE_APIS = "googleapis";
 	private static final int SHEETID_POS = 3;
-	*/
 
 	private URI sheetsServerURI;
 	private WebTarget target;
+	private Gson json;
 
 	public SheetsMiddleman() {
 		sheetsServerURI = null;
+		json = new Gson();
 	}
 
 	public void setSheetsServerURI(URI uri) {
@@ -52,16 +55,21 @@ public class SheetsMiddleman {
 		return sheetsServerURI;
 	}
 
-	public String[][] getSpreadsheetValues(String sheetURL, String userId, String range, boolean rangeStoredInCache, String serverSecret) {		
+	public String[][] getSpreadsheetValues(String sheetURL, String userId, String range, boolean rangeStoredInCache,
+			String serverSecret) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 
 		Client client = createClient();
-		
+
 		WebTarget localTarget;
-		//if(sheetURL.contains(GOOGLE_APIS))													//DUVIDA - O RESTO FUNCIONA SEM PROBLEMAS???
-		//	localTarget = getGoogleTarget(sheetURL, client, range);
-		//else
-			localTarget = client.target(sheetURL).path(userId).path(range).queryParam("secret", serverSecret); 		// BUILDING THE PATH
+		if (sheetURL.contains(GOOGLE_APIS)) { // DUVIDA - O RESTO FUNCIONA SEM PROBLEMAS???
+			System.out.println("FOLHA EM GOOGLE " + sheetURL);
+			localTarget = getGoogleTarget(sheetURL, client, range);
+		}
+		else
+			localTarget = client.target(sheetURL).path(userId).path(range).queryParam("secret", serverSecret); // BUILDING
+																												// THE
+																												// PATH
 
 		System.out.println(REQUEST + localTarget.getUri().toString());
 
@@ -75,16 +83,22 @@ public class SheetsMiddleman {
 				Response r = localTarget.request().accept(MediaType.APPLICATION_JSON).get(); // MAKING THE REQUEST
 
 				if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
-					rangeValues = r.readEntity(String[][].class);
+					if (sheetURL.contains(GOOGLE_APIS)) {
+						GoogleSheetsReturn googleSheet = json.fromJson(r.readEntity(String.class), GoogleSheetsReturn.class);
+						System.out.println("LI A RESPOSTA DO GOOGLE COM SUCESSO");
+						rangeValues = googleSheet.getValues();
+					}
+					else	
+						rangeValues = r.readEntity(String[][].class);
 				} else
 					System.out.println("Error, HTTP error status: " + r.getStatus());
-			
+
 				success = true;
-				
+
 			} catch (ProcessingException pe) {
-				if(rangeStoredInCache)
+				if (rangeStoredInCache)
 					return null;
-				
+
 				retries++;
 				connetionFailure(pe);
 			}
@@ -99,8 +113,8 @@ public class SheetsMiddleman {
 
 		while (!success && retries < MAX_RETRIES) {
 			try {
-				Response r = target.path(RestSpreadsheets.DELETESHEETS).path(userId).queryParam("secret", serverSecret).request()
-						.accept(MediaType.APPLICATION_JSON).delete();
+				Response r = target.path(RestSpreadsheets.DELETESHEETS).path(userId).queryParam("secret", serverSecret)
+						.request().accept(MediaType.APPLICATION_JSON).delete();
 
 				success = true;
 
@@ -122,9 +136,9 @@ public class SheetsMiddleman {
 	}
 
 	private Client createClient() {
-		//HTTPS
+		// HTTPS
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		
+
 		ClientConfig config = new ClientConfig();
 		config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
 		config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
@@ -142,13 +156,13 @@ public class SheetsMiddleman {
 		System.out.println(RETRY_CONNECTION);
 	}
 
-	//GOOGLE
-	/*
+	// GOOGLE
+
 	private WebTarget getGoogleTarget(String sheetURL, Client client, String range) {
 		String sheetId = sheetURL.split("/")[SHEETID_POS];
-		
-		return client.target(GOOGLE_SHEETS_PATH).path(sheetId).path(VALUES).path(range).queryParam(KEY_PARAM, GOOGLE_SHEETS_API_KEY);
+
+		return client.target(GOOGLE_SHEETS_PATH).path(sheetId).path(VALUES).path(range).queryParam(KEY_PARAM,
+				GOOGLE_SHEETS_API_KEY);
 
 	}
-	*/
 }

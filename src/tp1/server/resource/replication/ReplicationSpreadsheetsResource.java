@@ -127,9 +127,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				throw new WebApplicationException(Status.BAD_REQUEST);
 			}
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to secondary server. Redirecting...\n");
+			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
 		}
 	}
 

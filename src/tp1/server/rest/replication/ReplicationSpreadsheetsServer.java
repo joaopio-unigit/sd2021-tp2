@@ -55,7 +55,7 @@ public class ReplicationSpreadsheetsServer {
 		sheetsDiscovery.start();																				//COMECAR A ANUNCIAR O SERVICO
 
 		ResourceConfig config = new ResourceConfig();
-		config.register(new ReplicationSpreadsheetsResource());
+		config.register(ReplicationSpreadsheetsResource.class);
 		config.register(new GenericExceptionMapper());
 		config.register(new VersionFilter(replicationM));														//REPLICATION
 		

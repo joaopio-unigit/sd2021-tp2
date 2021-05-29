@@ -8,10 +8,11 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+
 import jakarta.ws.rs.core.MediaType;
 import tp1.api.Spreadsheet;
 
+@Path(RestSpreadsheets.PATH)
 public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	
 	public static final String DELETESHEETS = "/deleteSheets";

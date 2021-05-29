@@ -110,7 +110,7 @@ public class ReplicationManager {
 			}
 		}
 		
-		while(numberOfAcks.get() == 0) {	//ESPERAR ATE RECEBER UM ACK
+		while(numberOfAcks.get() == 0 && existingServers.size() > 1) {	//ESPERAR ATE RECEBER UM ACK
 			try {Thread.sleep(1000);} catch (InterruptedException e) {}
 		}
 	}
@@ -442,7 +442,7 @@ public class ReplicationManager {
 			String znodePath = domainZNode + "/" + znode;
 			String znodeURL = zk.getValue(znodePath);
 
-			if (primaryServerNode.compareTo(znode) > 0) {
+			if (primaryServerNode.compareTo(znode) >= 0) {
 				primaryServerNode = znode;
 				primaryServerURL = znodeURL;
 			}
