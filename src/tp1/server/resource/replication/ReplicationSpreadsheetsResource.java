@@ -74,7 +74,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		setSheetsMiddlemanURI(ReplicationSpreadsheetsServer.spreadsheetsDomain);
 
 		replicationM = ReplicationManager.getInstance();
-		replicationM.startZookeeper();
 		localVersionNumber = 0L;
 	}
 

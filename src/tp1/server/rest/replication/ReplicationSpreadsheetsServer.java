@@ -48,6 +48,7 @@ public class ReplicationSpreadsheetsServer {
 		serverURL = String.format("https://%s:%s/rest", ip, PORT);
 		
 		ReplicationManager replicationM = ReplicationManager.getInstance();										//REPLICATION
+		replicationM.startZookeeper();
 		
 		String serviceName = spreadsheetsDomain + ":" + SERVICE;
 		sheetsDiscovery = new Discovery(serviceName, serverURL, Discovery.DEFAULT);								//CRIAR O OBJETO DISCOVERY
