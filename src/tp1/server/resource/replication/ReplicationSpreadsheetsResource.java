@@ -17,7 +17,7 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
-
+import jakarta.ws.rs.core.UriBuilder;
 import tp1.api.Spreadsheet;
 import tp1.api.engine.AbstractSpreadsheet;
 import tp1.api.service.rest.ReplicationRestSpreadsheets;
@@ -128,7 +128,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 		} else {
 			Log.info("Request made to secondary server. Redirecting...\n");
-			throw new WebApplicationException(Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).queryParam("password", password);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
 
@@ -159,8 +161,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			updateLocalVersionNumber();
 		} else {
 			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).queryParam("password", password);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());		
 		}
 	}
 
@@ -208,9 +211,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			return sheet;
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to an outdated secondary server. Redirecting...");
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).queryParam("userId", userId).queryParam("password", password);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());	
 		}
 	}
 
@@ -304,9 +308,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			return sheetValues;
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to an outdated secondary server. Redirecting...");
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).queryParam("userId", userId).queryParam("password", password);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
 
@@ -337,9 +342,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			updateLocalVersionNumber();
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to a secondary server. Redirecting...");
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path(cell).queryParam("userId", userId).queryParam("password", password);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
 
@@ -390,9 +396,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			updateLocalVersionNumber();
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to a secondary server. Redirecting...");
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path(userId).queryParam("password", password);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
 
@@ -439,9 +446,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			updateLocalVersionNumber();
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to a secondary server. Redirecting...");
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path(userId).queryParam("password", password);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
 
@@ -464,9 +472,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			updateLocalVersionNumber();
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to a secondary server. Redirecting...");
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(RestSpreadsheets.DELETESHEETS).path(userId).queryParam("secret", secret);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
 
@@ -524,9 +533,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			return cellR.extractRangeValuesFrom(rangeValues);
 		} else {
-			Log.info("Request made to secondary server. Redirecting...");
-			throw new WebApplicationException(
-					Response.temporaryRedirect(URI.create(replicationM.getPrimaryServerURL())).build());
+			Log.info("Request made to an outdated secondary server. Redirecting...");
+			UriBuilder uriB = UriBuilder.newInstance();
+			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path(userId).path(range).queryParam("secret", secret);
+			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
 
