@@ -104,8 +104,11 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				sheet.setSheetId(sheetID);
 
 				// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-				replicationM.newTask(new CreateSpreadsheetTask(sheet));
-
+				System.out.println("VOU ADICIONAR UMA NOVA TASk");
+				Long taskAssignedVersion = replicationM.newTask(new CreateSpreadsheetTask(sheet));
+				System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
+				replicationM.createSpreadsheet(sheet, taskAssignedVersion);
+				
 				String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
 				sheet.setSheetURL(sheetURL);
 				spreadsheets.put(sheetID, sheet);
@@ -153,7 +156,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			checkUserPassword(sheet.getOwner(), password);
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
+			Long taskAssignedVersion = replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
+			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
+			replicationM.deleteSpreadsheet(sheetId, taskAssignedVersion);
 			
 			spreadsheets.remove(sheetId);
 
@@ -335,8 +340,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.newTask(new UpdateCellTask(sheetId, cell, rawValue));
-
+			Long taskAssignedVersion = replicationM.newTask(new UpdateCellTask(sheetId, cell, rawValue));
+			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
+			replicationM.updateCell(sheetId, cell, rawValue, taskAssignedVersion);
+			
 			sheet.setCellRawValue(cell, rawValue);
 
 			updateLocalVersionNumber();
@@ -388,8 +395,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.newTask(new ShareSpreadsheetTask(sheetId, userId));
-
+			Long taskAssignedVersion = replicationM.newTask(new ShareSpreadsheetTask(sheetId, userId));
+			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
+			replicationM.shareSpreadsheet(sheetId, userId, taskAssignedVersion);
 
 			sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
 
@@ -439,8 +447,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			checkUserPassword(sheet.getOwner(), password);
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.newTask(new UnshareSpreadsheetTask(sheetId, userId));
-
+			Long taskAssignedVersion = replicationM.newTask(new UnshareSpreadsheetTask(sheetId, userId));
+			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
+			replicationM.unshareSpreadsheet(sheetId, userId, taskAssignedVersion);
+			
 			sharedUsers.remove(userId);
 
 			updateLocalVersionNumber();
@@ -461,7 +471,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				throw new WebApplicationException(Status.BAD_REQUEST);
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-			replicationM.newTask(new DeleteUserSpreadsheetsTask(userId));
+			Long taskAssignedVersion = replicationM.newTask(new DeleteUserSpreadsheetsTask(userId));
+			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
+			replicationM.deleteUserSpreadsheets(userId, taskAssignedVersion);
 
 			List<String> userIdSheets = owners.remove(userId);
 

@@ -26,13 +26,7 @@ import jakarta.ws.rs.core.Response.Status;
 import tp1.api.Spreadsheet;
 import tp1.api.service.rest.ReplicationRestSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
-import tp1.replication.tasks.CreateSpreadsheetTask;
-import tp1.replication.tasks.DeleteSpreadsheetTask;
-import tp1.replication.tasks.DeleteUserSpreadsheetsTask;
-import tp1.replication.tasks.ShareSpreadsheetTask;
 import tp1.replication.tasks.Task;
-import tp1.replication.tasks.UnshareSpreadsheetTask;
-import tp1.replication.tasks.UpdateCellTask;
 import tp1.server.rest.replication.ReplicationSpreadsheetsServer;
 import tp1.util.InsecureHostnameVerifier;
 import tp1.util.ZookeeperProcessor;
@@ -88,50 +82,58 @@ public class ReplicationManager {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		while (numberOfAcks.get() == 0) {
-			for (int i = 0; i < existingServers.size(); i++) {
-				String serverURL = existingServers.get(i);
+		System.out.println("VOU COMECAR A FAZER PEDIDOS");
+		for (String server : existingServers)
+			System.out.println("SERVER EXISTENTE " + server);
 
-				if (!serverURL.equals(primaryServerURL)) {
-					String createSpreadsheetURL = serverURL + RestSpreadsheets.PATH
-							+ ReplicationRestSpreadsheets.OPERATION;
-
-					new Thread(() -> {
-						WebTarget target = client.target(createSpreadsheetURL);
-						Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
-								.accept(MediaType.APPLICATION_JSON)
-								.post(Entity.entity(sheet, MediaType.APPLICATION_JSON));
-
-						if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
-							numberOfAcks.incrementAndGet();
-						}
-					});
-				}
-			}
-		}
-		
-		while(numberOfAcks.get() == 0 && existingServers.size() > 1) {	//ESPERAR ATE RECEBER UM ACK
-			try {Thread.sleep(1000);} catch (InterruptedException e) {}
-		}
-	}
-	
-	/*
-	private void continueCreateSpreadsheet(int startingPos, Spreadsheet sheet, Long version) {
-		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
-
-		for (int i = startingPos; i < existingServers.size(); i++) {
+		for (int i = 0; i < existingServers.size(); i++) {
 			String serverURL = existingServers.get(i);
 
 			if (!serverURL.equals(primaryServerURL)) {
 				String createSpreadsheetURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.OPERATION;
-				target = client.target(createSpreadsheetURL);
-				target.request().header(RestSpreadsheets.HEADER_VERSION, version).accept(MediaType.APPLICATION_JSON)
-						.post(Entity.entity(sheet, MediaType.APPLICATION_JSON));
+
+				// new Thread(() -> {
+				System.out.println("SOU UM THREAD PARA CRIAR UMA FOLHA NO URL " + createSpreadsheetURL);
+				WebTarget target = client.target(createSpreadsheetURL);
+				Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
+						.accept(MediaType.APPLICATION_JSON).post(Entity.entity(sheet, MediaType.APPLICATION_JSON));
+
+				if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+					numberOfAcks.incrementAndGet();
+				} else {
+					if (r == null)
+						System.out.println("THREAD: RESPONSE CAME NULL");
+					else {
+						System.out.println("THREAD: RESPONSE STATUS " + r.getStatus());
+					}
+				}
+				// });
 			}
 		}
+
+		System.out.println("ACABEI DE FAZER OS PEDIDOS");
+		/*
+		 * while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR
+		 * ATE RECEBER UM ACK try {Thread.sleep(1000);} catch (InterruptedException e)
+		 * {} System.out.println("WAITING FOR SECONDARY SERVER"); }
+		 */
 	}
-	*/
+
+	/*
+	 * private void continueCreateSpreadsheet(int startingPos, Spreadsheet sheet,
+	 * Long version) { HttpsURLConnection.setDefaultHostnameVerifier(new
+	 * InsecureHostnameVerifier()); WebTarget target;
+	 * 
+	 * for (int i = startingPos; i < existingServers.size(); i++) { String serverURL
+	 * = existingServers.get(i);
+	 * 
+	 * if (!serverURL.equals(primaryServerURL)) { String createSpreadsheetURL =
+	 * serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.OPERATION;
+	 * target = client.target(createSpreadsheetURL);
+	 * target.request().header(RestSpreadsheets.HEADER_VERSION,
+	 * version).accept(MediaType.APPLICATION_JSON) .post(Entity.entity(sheet,
+	 * MediaType.APPLICATION_JSON)); } } }
+	 */
 
 	public void deleteSpreadsheet(String sheetId, Long version) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
@@ -348,41 +350,35 @@ public class ReplicationManager {
 
 	// GESTAO DE VERSAO
 
-	synchronized public void newTask(Task newTask) {
+	synchronized public Long newTask(Task newTask) {
 		tasks.add(newTask);
 
-		Long taskVersion = globalVersionNumber.getAndIncrement();
+		Long taskAssignedVersion = globalVersionNumber.getAndIncrement();
 
-		Tasks taskType = Tasks.valueOf(newTask.getClass().getSimpleName());
-		switch (taskType) {
-		case CreateSpreadsheetTask:
-			CreateSpreadsheetTask cTask = (CreateSpreadsheetTask) newTask;
-			exec.execute(() -> createSpreadsheet(cTask.getSpreadsheet(), taskVersion));
-			break;
-		case DeleteSpreadsheetTask:
-			DeleteSpreadsheetTask dTask = (DeleteSpreadsheetTask) newTask;
-			exec.execute(() -> deleteSpreadsheet(dTask.getSheetId(), taskVersion));
-			break;
-		case DeleteUserSpreadsheetsTask:
-			DeleteUserSpreadsheetsTask dUTask = (DeleteUserSpreadsheetsTask) newTask;
-			exec.execute(() -> deleteUserSpreadsheets(dUTask.getUserId(), taskVersion));
-			break;
-		case ShareSpreadsheetTask:
-			ShareSpreadsheetTask sTask = (ShareSpreadsheetTask) newTask;
-			exec.execute(() -> shareSpreadsheet(sTask.getSheetId(), sTask.getUserId(), taskVersion));
-			break;
-		case UnshareSpreadsheetTask:
-			UnshareSpreadsheetTask uTask = (UnshareSpreadsheetTask) newTask;
-			exec.execute(() -> unshareSpreadsheet(uTask.getSheetId(), uTask.getUserId(), taskVersion));
-			break;
-		case UpdateCellTask:
-			UpdateCellTask upTask = (UpdateCellTask) newTask;
-			exec.execute(() -> updateCell(upTask.getSheetId(), upTask.getCell(), upTask.getRawValue(), taskVersion));
-			break;
-		default:
-			System.out.println("Type of task not recognized");
-			break;
-		}
+		return taskAssignedVersion;
+
+		/*
+		 * Tasks taskType = Tasks.valueOf(newTask.getClass().getSimpleName()); switch
+		 * (taskType) { case CreateSpreadsheetTask:
+		 * System.out.println("A NOVA TASK E CRIAR UMA FOLHA"); CreateSpreadsheetTask
+		 * cTask = (CreateSpreadsheetTask) newTask; exec.execute(() ->
+		 * createSpreadsheet(cTask.getSpreadsheet(), taskVersion)); break; case
+		 * DeleteSpreadsheetTask: DeleteSpreadsheetTask dTask = (DeleteSpreadsheetTask)
+		 * newTask; exec.execute(() -> deleteSpreadsheet(dTask.getSheetId(),
+		 * taskVersion)); break; case DeleteUserSpreadsheetsTask:
+		 * DeleteUserSpreadsheetsTask dUTask = (DeleteUserSpreadsheetsTask) newTask;
+		 * exec.execute(() -> deleteUserSpreadsheets(dUTask.getUserId(), taskVersion));
+		 * break; case ShareSpreadsheetTask: ShareSpreadsheetTask sTask =
+		 * (ShareSpreadsheetTask) newTask; exec.execute(() ->
+		 * shareSpreadsheet(sTask.getSheetId(), sTask.getUserId(), taskVersion)); break;
+		 * case UnshareSpreadsheetTask: UnshareSpreadsheetTask uTask =
+		 * (UnshareSpreadsheetTask) newTask; exec.execute(() ->
+		 * unshareSpreadsheet(uTask.getSheetId(), uTask.getUserId(), taskVersion));
+		 * break; case UpdateCellTask: UpdateCellTask upTask = (UpdateCellTask) newTask;
+		 * exec.execute(() -> updateCell(upTask.getSheetId(), upTask.getCell(),
+		 * upTask.getRawValue(), taskVersion)); break; default:
+		 * System.out.println("Type of task not recognized"); break; }
+		 */
 	}
 
 	public Long getGlobalSequenceNumber() {
@@ -391,7 +387,7 @@ public class ReplicationManager {
 
 	public List<Task> getMissingTasks(Long localVersionNumber) {
 		int startingPos = localVersionNumber.intValue();
-		return tasks.subList(startingPos, globalVersionNumber.intValue());
+		return tasks.subList(startingPos, globalVersionNumber.intValue() - 1);
 	}
 
 	// ZOOKEEPER
@@ -466,14 +462,22 @@ public class ReplicationManager {
 
 		String serverNotificationURL = primaryServerURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.PRIMARY;
 		target = client.target(serverNotificationURL);
-		Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, globalVersionNumber)
-				.header(RestSpreadsheets.HEADER_VERSION, globalVersionNumber).accept(MediaType.APPLICATION_JSON)
+		Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, globalVersionNumber).accept(MediaType.APPLICATION_JSON)
 				.post(null);
 
-		if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+		if (r != null && r.getStatus() >= 200 && 300 > r.getStatus()) {
 			Log.info("New primary server notified");
 		} else {
 			Log.info("Failed to notify new primary server");
+			/*
+			System.out.println("URI A TENTAR CONTACTAR " + target.getUri().toString());
+			if (r == null)
+				System.out.println("R IS NULL");
+			else
+				System.out.println("STATUS DO R " + r.getStatus());
+			
+			System.out.println("PRIMARY SERVER URL: " + primaryServerURL);
+			*/
 		}
 	}
 
