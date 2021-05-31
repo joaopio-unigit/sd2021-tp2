@@ -474,11 +474,10 @@ public class ReplicationManager {
 			if (r == null)
 				System.out.println("R IS NULL");
 			else
-				System.out.println("STATUS DO R " + r.getStatus());
-			
-			System.out.println("PRIMARY SERVER URL: " + primaryServerURL);
+				System.out.println("STATUS DO R " + r.getStatus());			
 			*/
 		}
+		System.out.println("PRIMARY SERVER URL: " + primaryServerURL);
 	}
 
 	// METODOS PRIVADOS
