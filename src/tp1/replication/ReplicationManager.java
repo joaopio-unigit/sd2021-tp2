@@ -3,8 +3,6 @@ package tp1.replication;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 import java.util.concurrent.atomic.*;
 
@@ -36,8 +34,17 @@ public class ReplicationManager {
 	private final static int CONNECTION_TIMEOUT = 10000;
 	private final static int REPLY_TIMEOUT = 1000;
 	private static final String ZOO_ERROR = "Error on instantiating Zookeeper.";
-	private static final String ZOOKEEPER_HOSTPORT = "localhost:2181,kafka:2181";
-
+	private static final String ZOOKEEPER_HOSTPORT = "kafka:2181";
+	private static final String WAITING_FOR_SECONDARY = "Waiting for a secondary server acknowledge.";
+	private static final String THREAD_NULL = "THREAD: response is null.";
+	private static final String THREAD_STATUS = "THREAD: response status ";
+	private static final String PRIMARY_UPDATE_SUCCESS = "New primary server notified.";
+	private static final String PRIMARY_UPDATE_FAILURE =" Failed to notify new primary server.";
+	private static final String PRIMARY_SERVER = "PRIMARY SERVER URL: ";
+	private static final String CREATED_NODE = "Created znode: ";
+	private static final String CREATED_CHILD_NODE = "Created child znode: ";
+	private static final String REPLICA_NODE_NAME = "replica";
+	
 	private static Logger Log = Logger.getLogger(ReplicationManager.class.getName());
 
 	private static ReplicationManager instance;
@@ -46,7 +53,6 @@ public class ReplicationManager {
 	private Client client;
 	private String primaryServerURL;
 	private List<String> existingServers;
-	private ExecutorService exec;
 
 	private List<Task> tasks;
 	private AtomicLong globalVersionNumber;
@@ -60,7 +66,6 @@ public class ReplicationManager {
 
 	private ReplicationManager() {
 		primaryServerURL = null;
-		exec = Executors.newCachedThreadPool();
 
 		tasks = new ArrayList<Task>();
 		globalVersionNumber = new AtomicLong(0L);
@@ -82,269 +87,225 @@ public class ReplicationManager {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		System.out.println("VOU COMECAR A FAZER PEDIDOS");
-		for (String server : existingServers)
-			System.out.println("SERVER EXISTENTE " + server);
-
-		for (int i = 0; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
+		// for (int i = 0; i < existingServers.size(); i++) {
+		for (String serverURL : existingServers) {
+			// String serverURL = existingServers.get(i);
 
 			if (!serverURL.equals(primaryServerURL)) {
 				String createSpreadsheetURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.OPERATION;
-
-				// new Thread(() -> {
-				System.out.println("SOU UM THREAD PARA CRIAR UMA FOLHA NO URL " + createSpreadsheetURL);
 				WebTarget target = client.target(createSpreadsheetURL);
-				Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
-						.accept(MediaType.APPLICATION_JSON).post(Entity.entity(sheet, MediaType.APPLICATION_JSON));
 
-				if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
-					numberOfAcks.incrementAndGet();
-				} else {
-					if (r == null)
-						System.out.println("THREAD: RESPONSE CAME NULL");
-					else {
-						System.out.println("THREAD: RESPONSE STATUS " + r.getStatus());
+				new Thread(() -> {
+					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
+							.accept(MediaType.APPLICATION_JSON).post(Entity.entity(sheet, MediaType.APPLICATION_JSON));
+
+					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+						numberOfAcks.incrementAndGet();
+					} else {
+						if (r == null)
+							System.out.println(THREAD_NULL);
+						else {
+							System.out.println(THREAD_STATUS + r.getStatus());
+						}
 					}
-				}
-				// });
+				}).start();
+				;
 			}
 		}
 
-		System.out.println("ACABEI DE FAZER OS PEDIDOS");
-		/*
-		 * while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR
-		 * ATE RECEBER UM ACK try {Thread.sleep(1000);} catch (InterruptedException e)
-		 * {} System.out.println("WAITING FOR SECONDARY SERVER"); }
-		 */
+		while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR ATE RECEBER UM ACK
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+			}
+			System.out.println(WAITING_FOR_SECONDARY);
+		}
 	}
-
-	/*
-	 * private void continueCreateSpreadsheet(int startingPos, Spreadsheet sheet,
-	 * Long version) { HttpsURLConnection.setDefaultHostnameVerifier(new
-	 * InsecureHostnameVerifier()); WebTarget target;
-	 * 
-	 * for (int i = startingPos; i < existingServers.size(); i++) { String serverURL
-	 * = existingServers.get(i);
-	 * 
-	 * if (!serverURL.equals(primaryServerURL)) { String createSpreadsheetURL =
-	 * serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.OPERATION;
-	 * target = client.target(createSpreadsheetURL);
-	 * target.request().header(RestSpreadsheets.HEADER_VERSION,
-	 * version).accept(MediaType.APPLICATION_JSON) .post(Entity.entity(sheet,
-	 * MediaType.APPLICATION_JSON)); } } }
-	 */
 
 	public void deleteSpreadsheet(String sheetId, Long version) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
+		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		for (int i = 0; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
+		for (String serverURL : existingServers) {
 
 			if (!serverURL.equals(primaryServerURL)) {
 				String deleteSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(deleteSpreadsheetURL).path(sheetId).path(ReplicationRestSpreadsheets.OPERATION);
+				WebTarget target = client.target(deleteSpreadsheetURL).path(sheetId)
+						.path(ReplicationRestSpreadsheets.OPERATION);
 
-				Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
-						.accept(MediaType.APPLICATION_JSON).delete();
+				new Thread(() -> {
+					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
+							.accept(MediaType.APPLICATION_JSON).delete();
 
-				if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
-					// SUCESSO PODE SEGUIR EM FRENTE
-					int successPos = i;
-					// UMA THREAD CONTINUA O TRABALHO
-					exec.execute(() -> continueDeleteSpreadsheet(successPos + 1, sheetId, version));
-					break;
-				}
+					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+						numberOfAcks.incrementAndGet();
+					} else {
+						if (r == null)
+							System.out.println(THREAD_NULL);
+						else {
+							System.out.println(THREAD_STATUS + r.getStatus());
+						}
+					}
+				}).start();
 			}
 		}
-	}
 
-	private void continueDeleteSpreadsheet(int startingPos, String sheetId, Long version) {
-		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
-
-		for (int i = startingPos; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
-
-			if (!serverURL.equals(primaryServerURL)) {
-				String deleteSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(deleteSpreadsheetURL).path(sheetId).path(ReplicationRestSpreadsheets.OPERATION);
-				target.request().header(RestSpreadsheets.HEADER_VERSION, version).accept(MediaType.APPLICATION_JSON)
-						.delete();
+		while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR ATE RECEBER UM ACK
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
 			}
+			System.out.println(WAITING_FOR_SECONDARY);
 		}
 	}
 
 	public void updateCell(String sheetId, String cell, String rawValue, Long version) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
+		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		for (int i = 0; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
+		for (String serverURL : existingServers) {
 
 			if (!serverURL.equals(primaryServerURL)) {
 				String updateCellURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(updateCellURL).path(sheetId).path(cell)
+				WebTarget target = client.target(updateCellURL).path(sheetId).path(cell)
 						.path(ReplicationRestSpreadsheets.OPERATION);
 
-				Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
-						.accept(MediaType.APPLICATION_JSON).put(Entity.entity(rawValue, MediaType.APPLICATION_JSON));
+				new Thread(() -> {
+					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
+							.accept(MediaType.APPLICATION_JSON)
+							.put(Entity.entity(rawValue, MediaType.APPLICATION_JSON));
 
-				if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
-					// SUCESSO PODE SEGUIR EM FRENTE
-					int successPos = i;
-					// UMA THREAD CONTINUA O TRABALHO
-					exec.execute(() -> continueUpdateCell(successPos + 1, sheetId, cell, rawValue, version));
-					break;
-				}
+					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+						numberOfAcks.incrementAndGet();
+					} else {
+						if (r == null)
+							System.out.println(THREAD_NULL);
+						else {
+							System.out.println(THREAD_STATUS + r.getStatus());
+						}
+					}
+				}).start();
 			}
 		}
-	}
 
-	private void continueUpdateCell(int startingPos, String sheetId, String cell, String rawValue, Long version) {
-		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
-
-		for (int i = startingPos; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
-
-			if (!serverURL.equals(primaryServerURL)) {
-				String updateCellURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(updateCellURL).path(sheetId).path(cell)
-						.path(ReplicationRestSpreadsheets.OPERATION);
-				target.request().header(RestSpreadsheets.HEADER_VERSION, version).accept(MediaType.APPLICATION_JSON)
-						.put(Entity.entity(rawValue, MediaType.APPLICATION_JSON));
+		while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR ATE RECEBER UM ACK
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
 			}
+			System.out.println(WAITING_FOR_SECONDARY);
 		}
 	}
 
 	public void shareSpreadsheet(String sheetId, String userId, Long version) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
+		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		for (int i = 0; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
+		for (String serverURL : existingServers) {
 
 			if (!serverURL.equals(primaryServerURL)) {
 				String shareSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(shareSpreadsheetURL).path(sheetId).path("share").path(userId)
+				WebTarget target = client.target(shareSpreadsheetURL).path(sheetId).path("share").path(userId)
 						.path(ReplicationRestSpreadsheets.OPERATION);
 
-				Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
-						.accept(MediaType.APPLICATION_JSON).post(null);
+				new Thread(() -> {
+					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
+							.accept(MediaType.APPLICATION_JSON).post(null);
 
-				if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
-					// SUCESSO PODE SEGUIR EM FRENTE
-					int successPos = i;
-					// UMA THREAD CONTINUA O TRABALHO
-					exec.execute(() -> continueShareSpreadsheet(successPos + 1, sheetId, userId, version));
-					break;
-				}
+					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+						numberOfAcks.incrementAndGet();
+					} else {
+						if (r == null)
+							System.out.println(THREAD_NULL);
+						else {
+							System.out.println(THREAD_STATUS + r.getStatus());
+						}
+					}
+				}).start();
 			}
 		}
-	}
 
-	private void continueShareSpreadsheet(int startingPos, String sheetId, String userId, Long version) {
-		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
-
-		for (int i = startingPos; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
-
-			if (!serverURL.equals(primaryServerURL)) {
-				String shareSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(shareSpreadsheetURL).path(sheetId).path("share").path(userId)
-						.path(ReplicationRestSpreadsheets.OPERATION);
-				target.request().header(RestSpreadsheets.HEADER_VERSION, version).accept(MediaType.APPLICATION_JSON)
-						.post(null);
+		while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR ATE RECEBER UM ACK
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
 			}
+			System.out.println(WAITING_FOR_SECONDARY);
 		}
 	}
 
 	public void unshareSpreadsheet(String sheetId, String userId, Long version) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
+		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		for (int i = 0; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
+		for (String serverURL : existingServers) {
 
 			if (!serverURL.equals(primaryServerURL)) {
 				String unshareSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(unshareSpreadsheetURL).path(sheetId).path("share").path(userId)
+				WebTarget target = client.target(unshareSpreadsheetURL).path(sheetId).path("share").path(userId)
 						.path(ReplicationRestSpreadsheets.OPERATION);
 
-				Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
-						.accept(MediaType.APPLICATION_JSON).delete();
+				new Thread(() -> {
+					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
+							.accept(MediaType.APPLICATION_JSON).delete();
 
-				if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
-					// SUCESSO PODE SEGUIR EM FRENTE
-					int successPos = i;
-					// UMA THREAD CONTINUA O TRABALHO
-					exec.execute(() -> continueUnshareSpreadsheet(successPos + 1, sheetId, userId, version));
-					break;
-				}
+					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+						numberOfAcks.incrementAndGet();
+					} else {
+						if (r == null)
+							System.out.println(THREAD_NULL);
+						else {
+							System.out.println(THREAD_STATUS + r.getStatus());
+						}
+					}
+				}).start();
 			}
 		}
-	}
 
-	private void continueUnshareSpreadsheet(int startingPos, String sheetId, String userId, Long version) {
-		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
-
-		for (int i = startingPos; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
-
-			if (!serverURL.equals(primaryServerURL)) {
-				String unshareSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(unshareSpreadsheetURL).path(sheetId).path("share").path(userId)
-						.path(ReplicationRestSpreadsheets.OPERATION);
-				target.request().header(RestSpreadsheets.HEADER_VERSION, version).accept(MediaType.APPLICATION_JSON)
-						.delete();
+		while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR ATE RECEBER UM ACK
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
 			}
+			System.out.println(WAITING_FOR_SECONDARY);
 		}
 	}
 
 	public void deleteUserSpreadsheets(String userId, Long version) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
+		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		for (int i = 0; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
+		for (String serverURL : existingServers) {
 
 			if (!serverURL.equals(primaryServerURL)) {
 				String deleteUserSpreadsheetsURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(deleteUserSpreadsheetsURL).path(ReplicationRestSpreadsheets.DELETESHEETS)
-						.path(userId).path(ReplicationRestSpreadsheets.OPERATION);
+				WebTarget target = client.target(deleteUserSpreadsheetsURL)
+						.path(ReplicationRestSpreadsheets.DELETESHEETS).path(userId)
+						.path(ReplicationRestSpreadsheets.OPERATION);
 
-				Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
-						.accept(MediaType.APPLICATION_JSON).delete();
+				new Thread(() -> {
+					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
+							.accept(MediaType.APPLICATION_JSON).delete();
 
-				if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
-					// SUCESSO PODE SEGUIR EM FRENTE
-					int successPos = i;
-					// UMA THREAD CONTINUA O TRABALHO
-					exec.execute(() -> continueDeleteUserSpreadsheets(successPos + 1, userId, version));
-					break;
-				}
+					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+						numberOfAcks.incrementAndGet();
+					} else {
+						if (r == null)
+							System.out.println(THREAD_NULL);
+						else {
+							System.out.println(THREAD_STATUS + r.getStatus());
+						}
+					}
+				}).start();
 			}
 		}
-	}
 
-	private void continueDeleteUserSpreadsheets(int startingPos, String userId, Long version) {
-		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
-		WebTarget target;
-
-		for (int i = startingPos; i < existingServers.size(); i++) {
-			String serverURL = existingServers.get(i);
-
-			if (!serverURL.equals(primaryServerURL)) {
-				String deleteUserSpreadsheetsURL = serverURL + RestSpreadsheets.PATH;
-				target = client.target(deleteUserSpreadsheetsURL).path(ReplicationRestSpreadsheets.DELETESHEETS)
-						.path(userId).path(ReplicationRestSpreadsheets.OPERATION);
-				target.request().header(RestSpreadsheets.HEADER_VERSION, version).accept(MediaType.APPLICATION_JSON)
-						.delete();
+		while (numberOfAcks.get() == 0 && existingServers.size() > 1) { // ESPERAR ATE RECEBER UM ACK
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
 			}
+			System.out.println(WAITING_FOR_SECONDARY);
 		}
 	}
 
@@ -402,15 +363,15 @@ public class ReplicationManager {
 		String domainZNode = "/" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
 
 		if (zk.write(domainZNode, CreateMode.PERSISTENT) != null) {
-			System.out.println("Created znode: " + domainZNode);
+			System.out.println(CREATED_NODE + domainZNode);
 		}
 
-		String serverZNode = String.format("%s/%s_", domainZNode, "replica");
+		String serverZNode = String.format("%s/%s_", domainZNode, REPLICA_NODE_NAME);
 
 		// PASSAR O URL DO SERVIDOR NO NOME DO ZNODE
 		String znodePath = zk.write(serverZNode, ReplicationSpreadsheetsServer.serverURL,
 				CreateMode.EPHEMERAL_SEQUENTIAL);
-		System.out.println("Created child znode: " + znodePath);
+		System.out.println(CREATED_CHILD_NODE + znodePath);
 
 		// LISTA COM ELEMENTOS COMO replica_00000000000000
 		List<String> existingZnodes = zk.getChildren(domainZNode, new Watcher() {
@@ -462,22 +423,20 @@ public class ReplicationManager {
 
 		String serverNotificationURL = primaryServerURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.PRIMARY;
 		target = client.target(serverNotificationURL);
-		Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, globalVersionNumber).accept(MediaType.APPLICATION_JSON)
-				.post(null);
+		Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, globalVersionNumber)
+				.accept(MediaType.APPLICATION_JSON).post(null);
 
 		if (r != null && r.getStatus() >= 200 && 300 > r.getStatus()) {
-			Log.info("New primary server notified");
+			Log.info(PRIMARY_UPDATE_SUCCESS);
 		} else {
-			Log.info("Failed to notify new primary server");
+			Log.info(PRIMARY_UPDATE_FAILURE);
 			/*
-			System.out.println("URI A TENTAR CONTACTAR " + target.getUri().toString());
-			if (r == null)
-				System.out.println("R IS NULL");
-			else
-				System.out.println("STATUS DO R " + r.getStatus());			
-			*/
+			 * System.out.println("URI A TENTAR CONTACTAR " + target.getUri().toString());
+			 * if (r == null) System.out.println("R IS NULL"); else
+			 * System.out.println("STATUS DO R " + r.getStatus());
+			 */
 		}
-		System.out.println("PRIMARY SERVER URL: " + primaryServerURL);
+		System.out.println(PRIMARY_SERVER + primaryServerURL);
 	}
 
 	// METODOS PRIVADOS

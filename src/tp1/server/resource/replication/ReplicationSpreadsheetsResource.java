@@ -104,7 +104,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				sheet.setSheetId(sheetID);
 
 				// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
-				System.out.println("VOU ADICIONAR UMA NOVA TASk");
+				System.out.println("VOU ADICIONAR UMA NOVA TASK");
 				Long taskAssignedVersion = replicationM.newTask(new CreateSpreadsheetTask(sheet));
 				System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
 				replicationM.createSpreadsheet(sheet, taskAssignedVersion);
@@ -173,7 +173,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, Long version) { // OPERACAO DE LEITURA
-		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || version == null || (version <= localVersionNumber)) {
 			Log.info("getSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 			if (sheetId == null || userId == null)
@@ -224,7 +224,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, Long version) { // OPERACAO DE LEITURA
-		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || version == null || (version <= localVersionNumber)) {
 			Log.info("getSpreadsheetValues : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
 			if (sheetId == null || userId == null || password == null)
@@ -492,7 +492,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public String[][] importRange(String sheetId, String userId, String range, String secret, Long version) { // OPERACAO DE LEITURA
-		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || (version <= localVersionNumber)) {
+		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || version == null || (version <= localVersionNumber)) {
 			Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
 			if (!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
