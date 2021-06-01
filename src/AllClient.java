@@ -21,7 +21,7 @@ import tp1.util.InsecureHostnameVerifier;
 public class AllClient {
 
 	private final static int CONNECTION_TIMEOUT = 10000;
-	private final static int REPLY_TIMEOUT = 1000;
+	private final static int REPLY_TIMEOUT = 10000;
 
 	public static void main(String[] args) {
 		/*
@@ -30,8 +30,10 @@ public class AllClient {
 		 * queryParam("query", "queryParam"); System.out.println(uriB.toTemplate()); URI
 		 * uri = uriB.build(); System.out.println(uri.toString());
 		 */
+
 		Scanner in = new Scanner(System.in);
-		System.out.println("Please insert the mode you want to execute \n0-CreateSpreadsheet 1-GetSpreadsheet");
+		System.out.println(
+				"Please insert the mode you want to execute \n0-CreateUser 1-CreateSpreadsheet 2-GetSpreadsheet");
 		int mode = Integer.parseInt(in.nextLine().trim());
 
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
@@ -41,26 +43,23 @@ public class AllClient {
 		Client client = ClientBuilder.newClient(config);
 		WebTarget target;
 
-		System.out.println("Please insert the userService URL:");
-		String userURL = in.nextLine();
-		String fullUserURL = userURL + RestUsers.PATH;
-		System.out.println("Creating user using " + fullUserURL);
-
-		target = client.target(fullUserURL);
-		Response r = target.request().accept(MediaType.APPLICATION_JSON)
-				.post(Entity.entity(new User("id", "nome", "email", "pass"), MediaType.APPLICATION_JSON));
-
-		if (r.getStatus() == Status.OK.getStatusCode())
-			System.out.println("Created User nome!!");
-		else
-			System.out.println("PROBLEMA EM CONTACTAR O SERVIDOR DE UTILIZADORES");
-
-		System.out.println("\nPlease insert the spreadsheetsService URL:");
-		String spreadsheetURL = in.nextLine();
-		String fullSheetsURL = spreadsheetURL + RestSpreadsheets.PATH;
-
+		Response r = null;
+		String fullUserURL = null;
 		switch (mode) {
 		case 0:
+			System.out.println("Please insert the userService URL:");
+			String userURL = in.nextLine();
+			fullUserURL = userURL + RestUsers.PATH;
+			System.out.println("Creating user using " + fullUserURL);
+			target = client.target(fullUserURL);
+			r = target.request().accept(MediaType.APPLICATION_JSON)
+					.post(Entity.entity(new User("id", "nome", "email", "pass"), MediaType.APPLICATION_JSON));
+			break;
+		case 1:
+			System.out.println("Please insert the spreadsheetsService URL:");
+			String spreadsheetURL = in.nextLine();
+			String fullSheetsURL = spreadsheetURL + RestSpreadsheets.PATH;
+
 			// CREATESPREADSHEET
 			target = client.target(fullSheetsURL).queryParam("password", "pass");
 			System.out.println("Creating spreadsheet using " + target.getUri().toString());
@@ -68,9 +67,12 @@ public class AllClient {
 					Entity.entity(new Spreadsheet(null, "id", null, 1, 1, null, null), MediaType.APPLICATION_JSON));
 
 			break;
-		case 1:
+		case 2:
+			System.out.println("Please insert the spreadsheetsService URL:");
+			spreadsheetURL = in.nextLine();
+			fullSheetsURL = spreadsheetURL + RestSpreadsheets.PATH;
 			// GETSPREADSHEET
-			String searchSheetId = "62c6d177-388d-4a80-ac14-a99dac9ada12";
+			String searchSheetId = "4447519d-216b-47a4-b5bd-cdc969018ec6";
 			target = client.target(fullSheetsURL).path(searchSheetId).queryParam("userId", "id").queryParam("password",
 					"pass");
 			System.out.println("Getting spreadsheet using " + target.getUri().toString());
@@ -81,11 +83,14 @@ public class AllClient {
 		if (r.getStatus() == Status.OK.getStatusCode()) {
 			switch (mode) {
 			case 0:
+				System.out.println("Created User nome!!");
+				break;
+			case 1:
 				// CREATESPREADSHEET System.out.println("Created spreadsheet!!"); String
 				String sheetId = r.readEntity(String.class);
 				System.out.println("SHEETID: " + sheetId);
 				break;
-			case 1:
+			case 2:
 
 				// GETSPREADSHEET
 				System.out.println("Got spreadsheet");
@@ -99,7 +104,7 @@ public class AllClient {
 				System.out.println("TEM ENTIDADE " + r.getStatus());
 				System.out.println("TIPO DE ENTIDADE " + r.getEntity().getClass().getSimpleName());
 			} else {
-				System.out.println("PROBLEMA EM CONTACTAR O SERVIDOR DE FOLHAS: STATUS " + r.getStatus());
+				System.out.println("PROBLEMA EM CONTACTAR O SERVIDOR: STATUS " + r.getStatus());
 			}
 		}
 		in.close();

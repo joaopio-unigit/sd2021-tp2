@@ -14,16 +14,18 @@ import org.apache.zookeeper.Watcher;
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.ClientProperties;
 
+import com.google.gson.Gson;
+
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.Response.Status;
 import tp1.api.Spreadsheet;
 import tp1.api.service.rest.ReplicationRestSpreadsheets;
 import tp1.api.service.rest.RestSpreadsheets;
+import tp1.replication.replies.ExecutedTasks;
 import tp1.replication.tasks.Task;
 import tp1.server.rest.replication.ReplicationSpreadsheetsServer;
 import tp1.util.InsecureHostnameVerifier;
@@ -56,6 +58,10 @@ public class ReplicationManager {
 
 	private List<Task> tasks;
 	private AtomicLong globalVersionNumber;
+	private Gson json;
+	
+	//APAGAR
+	String znodePATHTOIGNORE;
 
 	synchronized public static ReplicationManager getInstance() {
 		if (instance == null)
@@ -71,6 +77,8 @@ public class ReplicationManager {
 		globalVersionNumber = new AtomicLong(0L);
 
 		client = createClient();
+		
+		json = new Gson();
 	}
 
 	public boolean isPrimary(String serverURL) {
@@ -87,11 +95,8 @@ public class ReplicationManager {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
-		// for (int i = 0; i < existingServers.size(); i++) {
 		for (String serverURL : existingServers) {
-			// String serverURL = existingServers.get(i);
-
-			if (!serverURL.equals(primaryServerURL)) {
+			if (!serverURL.equals(primaryServerURL) && ! znodePATHTOIGNORE.equals(serverURL)) {
 				String createSpreadsheetURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.OPERATION;
 				WebTarget target = client.target(createSpreadsheetURL);
 
@@ -99,7 +104,7 @@ public class ReplicationManager {
 					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
 							.accept(MediaType.APPLICATION_JSON).post(Entity.entity(sheet, MediaType.APPLICATION_JSON));
 
-					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+					if (r != null && isSuccessful(r)) {
 						numberOfAcks.incrementAndGet();
 					} else {
 						if (r == null)
@@ -137,7 +142,7 @@ public class ReplicationManager {
 					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
 							.accept(MediaType.APPLICATION_JSON).delete();
 
-					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+					if (r != null && isSuccessful(r)) {
 						numberOfAcks.incrementAndGet();
 					} else {
 						if (r == null)
@@ -175,7 +180,7 @@ public class ReplicationManager {
 							.accept(MediaType.APPLICATION_JSON)
 							.put(Entity.entity(rawValue, MediaType.APPLICATION_JSON));
 
-					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+					if (r != null && isSuccessful(r)) {
 						numberOfAcks.incrementAndGet();
 					} else {
 						if (r == null)
@@ -212,7 +217,7 @@ public class ReplicationManager {
 					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
 							.accept(MediaType.APPLICATION_JSON).post(null);
 
-					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+					if (r != null && isSuccessful(r)) {
 						numberOfAcks.incrementAndGet();
 					} else {
 						if (r == null)
@@ -249,7 +254,7 @@ public class ReplicationManager {
 					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
 							.accept(MediaType.APPLICATION_JSON).delete();
 
-					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+					if (r != null && isSuccessful(r)) {
 						numberOfAcks.incrementAndGet();
 					} else {
 						if (r == null)
@@ -287,7 +292,7 @@ public class ReplicationManager {
 					Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
 							.accept(MediaType.APPLICATION_JSON).delete();
 
-					if (r != null && r.getStatus() == Status.OK.getStatusCode()) {
+					if (r != null && isSuccessful(r)) {
 						numberOfAcks.incrementAndGet();
 					} else {
 						if (r == null)
@@ -309,6 +314,10 @@ public class ReplicationManager {
 		}
 	}
 
+	public List<Task> getExecutedTasks(){
+		return tasks;
+	}
+	
 	// GESTAO DE VERSAO
 
 	synchronized public Long newTask(Task newTask) {
@@ -346,9 +355,56 @@ public class ReplicationManager {
 		return globalVersionNumber.get();
 	}
 
-	public List<Task> getMissingTasks(Long localVersionNumber) {
-		int startingPos = localVersionNumber.intValue();
-		return tasks.subList(startingPos, globalVersionNumber.intValue() - 1);
+	public List<Task> getMissingTasks() {
+		//AtomicInteger numberOfAcks = new AtomicInteger(0);
+		List<List<Task>> updatedTasks = new LinkedList<List<Task>>();
+		
+		for (String serverURL : existingServers) {
+			if (!serverURL.equals(ReplicationSpreadsheetsServer.serverURL)) {
+				String getTasksURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.TASKS;
+				WebTarget target = client.target(getTasksURL);
+				
+				System.out.println("MAKING A TASK REQUEST TO " + getTasksURL);
+				
+				//new Thread(() -> {
+					Response r = target.request().accept(MediaType.APPLICATION_JSON).get();
+					
+					///int ackNumber = numberOfAcks.incrementAndGet();
+					
+					if (r != null && isSuccessful(r)) {
+						List<Task> receivedTasks = json.fromJson(r.readEntity(String.class), ExecutedTasks.class).getExecutedTasks();
+						//updatedTasks.add(ackNumber-1, receivedTasks);
+						updatedTasks.add(receivedTasks);
+					} else {
+						if (r == null)
+							System.out.println(THREAD_NULL);
+						else {
+							System.out.println(THREAD_STATUS + r.getStatus());
+						}
+					}
+				//}).start();
+			}
+		}
+		
+		/*
+		while (numberOfAcks.get() != existingServers.size() -1) { // ESPERAR ATE RECEBER UM ACK
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+			}
+			System.out.println(WAITING_FOR_SECONDARY);
+		}
+		*/
+		List<Task> mostUpdatedTasks = null;
+		int mostUpdatedTasksNumber = 0;
+		
+		for(List<Task> taskList : updatedTasks) {
+			if(taskList.size()  > mostUpdatedTasksNumber) {
+				mostUpdatedTasks = taskList;
+				mostUpdatedTasksNumber = taskList.size();
+			}
+		}
+		return mostUpdatedTasks;
 	}
 
 	// ZOOKEEPER
@@ -372,7 +428,7 @@ public class ReplicationManager {
 		String znodePath = zk.write(serverZNode, ReplicationSpreadsheetsServer.serverURL,
 				CreateMode.EPHEMERAL_SEQUENTIAL);
 		System.out.println(CREATED_CHILD_NODE + znodePath);
-
+			
 		// LISTA COM ELEMENTOS COMO replica_00000000000000
 		List<String> existingZnodes = zk.getChildren(domainZNode, new Watcher() {
 			@Override
@@ -396,6 +452,8 @@ public class ReplicationManager {
 		String primaryServerNode = existingZNodes.get(0);
 
 		for (String znode : existingZNodes) {
+			
+			
 			String znodePath = domainZNode + "/" + znode;
 			String znodeURL = zk.getValue(znodePath);
 
@@ -404,11 +462,18 @@ public class ReplicationManager {
 				primaryServerURL = znodeURL;
 			}
 
+			//APAGAR
+			if(znode.contains("1")) {
+				znodePATHTOIGNORE = znodeURL;
+				System.out.println("ADICIONEI O NODE PARA IGNORAR: " + znodePATHTOIGNORE);
+			}
+
 			// OBTER OS URLS QUANDO OCORREM ALTERACOES OFERECE MELHOR DESEMPENHO
 			existingServers.add(znodeURL);
 		}
 
-		if (previousPrimaryServerURL != null && !previousPrimaryServerURL.equals(primaryServerURL))
+		//NOTIFICAR O SERVIDOR QUE E O PRIMARIO QUANDO EXISTEM OUTROS, HOUVE UMA ALTERACAO E SO ELE FAZER A NOTIFICACAO
+		if (previousPrimaryServerURL != null && !previousPrimaryServerURL.equals(primaryServerURL) && primaryServerURL.equals(ReplicationSpreadsheetsServer.serverURL))
 			primaryServerNotification();
 	}
 
@@ -423,8 +488,7 @@ public class ReplicationManager {
 
 		String serverNotificationURL = primaryServerURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.PRIMARY;
 		target = client.target(serverNotificationURL);
-		Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, globalVersionNumber)
-				.accept(MediaType.APPLICATION_JSON).post(null);
+		Response r = target.request().accept(MediaType.APPLICATION_JSON).post(null);
 
 		if (r != null && r.getStatus() >= 200 && 300 > r.getStatus()) {
 			Log.info(PRIMARY_UPDATE_SUCCESS);
@@ -446,5 +510,12 @@ public class ReplicationManager {
 		config.property(ClientProperties.CONNECT_TIMEOUT, CONNECTION_TIMEOUT);
 		config.property(ClientProperties.READ_TIMEOUT, REPLY_TIMEOUT);
 		return ClientBuilder.newClient(config);
+	}
+
+	private boolean isSuccessful(Response r) {
+		if(r.getStatus() >= 200 && r.getStatus() < 300)
+			return true;
+		else
+			return false;
 	}
 }

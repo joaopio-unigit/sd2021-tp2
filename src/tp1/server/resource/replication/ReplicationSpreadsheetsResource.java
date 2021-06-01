@@ -13,6 +13,8 @@ import java.util.concurrent.Executors;
 
 import java.util.logging.Logger;
 
+import com.google.gson.Gson;
+
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
@@ -27,6 +29,7 @@ import tp1.clients.rest.UsersMiddleman;
 import tp1.impl.engine.SpreadsheetEngineImpl;
 import tp1.replication.ReplicationManager;
 import tp1.replication.Tasks;
+import tp1.replication.replies.ExecutedTasks;
 import tp1.replication.tasks.CreateSpreadsheetTask;
 import tp1.replication.tasks.DeleteSpreadsheetTask;
 import tp1.replication.tasks.DeleteUserSpreadsheetsTask;
@@ -58,6 +61,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	private ReplicationManager replicationM;
 	private Long localVersionNumber;
+	private Gson json;
 
 	public ReplicationSpreadsheetsResource() {
 
@@ -75,6 +79,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 		replicationM = ReplicationManager.getInstance();
 		localVersionNumber = 0L;
+		
+		json = new Gson();
 	}
 
 	@Override
@@ -102,11 +108,26 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			if (correctPassword) {
 				String sheetID = UUID.randomUUID().toString();
 				sheet.setSheetId(sheetID);
-
+				
+				/*
+				System.out.println("ESTOU NO PRIMARIO ANTES DE ADICIONAR");
+				List<Task> tasks = replicationM.tasks;
+				for(Task t: tasks)
+					System.out.println(t.getClass().getSimpleName());
+				*/
+				
 				// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 				System.out.println("VOU ADICIONAR UMA NOVA TASK");
 				Long taskAssignedVersion = replicationM.newTask(new CreateSpreadsheetTask(sheet));
 				System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
+				
+				/*
+				System.out.println("ESTOU NO PRIMARIO DEPOIS DE ADICIONAR");
+				tasks = replicationM.tasks;
+				for(Task t: tasks)
+					System.out.println(t.getClass().getSimpleName());
+				*/
+				
 				replicationM.createSpreadsheet(sheet, taskAssignedVersion);
 				
 				String sheetURL = sheetsM.getSheetsServerURI().toString() + RestSpreadsheets.PATH + "/" + sheetID;
@@ -551,12 +572,34 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		}
 	}
 
+	@Override
+	public String getExecutedTasks() {
+		Log.info("getExecutedTasks");
+		return json.toJson(new ExecutedTasks(replicationM.getExecutedTasks()));
+	}
+	
 	// OPERACOES NOS SECUNDARIOS
 
 	@Override
 	public String createSpreadsheetOperation(Spreadsheet sheet, Long version) {
 		checkForUpdates(version);
-
+		
+		/*
+		System.out.println("ESTOU NO SECUNDARIO ANTES DE ADICIONAR");
+		List<Task> tasks = replicationM.tasks;
+		for(Task t: tasks)
+			System.out.println(t.getClass().getSimpleName());
+		*/
+		
+		replicationM.newTask(new CreateSpreadsheetTask(sheet));
+		
+		/*
+		System.out.println("ESTOU NO SECUNDARIO DEPOIS DE ADICIONAR");
+		tasks = replicationM.tasks;
+		for(Task t: tasks)
+			System.out.println(t.getClass().getSimpleName());
+		*/
+		
 		Log.info("createSpreadsheetOperation : " + sheet);
 
 		String sheetID = sheet.getSheetId();
@@ -586,6 +629,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public void deleteSpreadsheetOperation(String sheetId, Long version) {
 		checkForUpdates(version);
+		
+		replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
 
 		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId);
 		spreadsheets.remove(sheetId);
@@ -597,6 +642,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public void updateCellOperation(String sheetId, String cell, String rawValue, Long version) {
 		checkForUpdates(version);
+		
+		replicationM.newTask(new UpdateCellTask(sheetId, cell, rawValue));
 
 		Log.info("updateCellOperaion : " + cell + "; value = " + rawValue + "; sheet = " + sheetId);
 
@@ -614,6 +661,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public void shareSpreadsheetOperation(String sheetId, String userId, Long version) {
 		checkForUpdates(version);
 
+		replicationM.newTask(new ShareSpreadsheetTask(sheetId, userId));
+		
 		Log.info("shareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
 
 		Spreadsheet sheet;
@@ -639,6 +688,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public void unshareSpreadsheetOperation(String sheetId, String userId, Long version) {
 		checkForUpdates(version);
 
+		replicationM.newTask(new UnshareSpreadsheetTask(sheetId, userId));
+		
 		Log.info("unshareSpreadsheetOperation : " + sheetId + "; userId = " + userId);
 
 		Spreadsheet sheet;
@@ -663,6 +714,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public void deleteUserSpreadsheetsOperation(String userId, Long version) {
 		checkForUpdates(version);
+		
+		replicationM.newTask(new DeleteUserSpreadsheetsTask(userId));
 
 		Log.info("deleteUserSpreadsheetsOperation : " + userId);
 
@@ -677,8 +730,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public void primaryNodeNotification(Long lastestVersion) {
-		checkForUpdates(lastestVersion);
+	public void primaryNodeNotification() {
+		List<Task> missingTasks = replicationM.getMissingTasks();
+		executeTasks(missingTasks.subList(localVersionNumber.intValue(), missingTasks.size()));
 	}
 	
 	// METODOS PRIVADOS
@@ -764,8 +818,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	private void checkForUpdates(Long receivedVersion) {
 		if (receivedVersion > localVersionNumber) {
-			List<Task> missingTasks = replicationM.getMissingTasks(localVersionNumber);
-			executeTasks(missingTasks);
+			List<Task> missingTasks = replicationM.getMissingTasks();
+			executeTasks(missingTasks.subList(localVersionNumber.intValue(), missingTasks.size() -1));
 		}
 	}
 
@@ -803,5 +857,5 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			}
 		}
 	}
-	
+
 }
