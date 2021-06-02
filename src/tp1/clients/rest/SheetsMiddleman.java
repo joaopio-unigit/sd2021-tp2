@@ -85,7 +85,6 @@ public class SheetsMiddleman {
 				if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
 					if (sheetURL.contains(GOOGLE_APIS)) {
 						GoogleSheetsReturn googleSheet = json.fromJson(r.readEntity(String.class), GoogleSheetsReturn.class);
-						System.out.println("LI A RESPOSTA DO GOOGLE COM SUCESSO");
 						rangeValues = googleSheet.getValues();
 					}
 					else	

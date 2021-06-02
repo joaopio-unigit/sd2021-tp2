@@ -35,6 +35,13 @@ public class ReplicationSpreadsheetsServer {
 	
 	public static void main(String[] args) {
 		
+		/*
+		System.out.println("SOU UM SERVIDOR REPLICA E ESTOU A CORRER");
+		System.out.println("ARGUMENTOS:");
+		for(String arg : args)
+			System.out.println(arg);
+		*/
+		
 		spreadsheetsDomain =  args.length > 0 ? args[0] : "?";
 		serverSecret =  args.length > 0 ? args[1] : "?";
 				
@@ -47,18 +54,26 @@ public class ReplicationSpreadsheetsServer {
 		//HTTPS
 		serverURL = String.format("https://%s:%s/rest", ip, PORT);
 		
+		//System.out.println("PONTO1");
+		
 		ReplicationManager replicationM = ReplicationManager.getInstance();										//REPLICATION
 		replicationM.startZookeeper();
+		
+		//System.out.println("PONTO2");
 		
 		String serviceName = spreadsheetsDomain + ":" + SERVICE;
 		sheetsDiscovery = new Discovery(serviceName, serverURL, Discovery.DEFAULT);								//CRIAR O OBJETO DISCOVERY
 		
 		sheetsDiscovery.start();																				//COMECAR A ANUNCIAR O SERVICO
 
+		//System.out.println("PONTO3");
+		
 		ResourceConfig config = new ResourceConfig();
 		config.register(ReplicationSpreadsheetsResource.class);
 		config.register(new GenericExceptionMapper());
 		config.register(new VersionFilter(replicationM));														//REPLICATION
+	
+		//System.out.println("PONTO4");
 		
 		JdkHttpServerFactory.createHttpServer( URI.create(serverURL), config, SSLContext.getDefault());
 	

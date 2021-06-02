@@ -9,7 +9,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import tp1.api.Spreadsheet;
 
@@ -126,5 +126,5 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@GET
 	@Path(TASKS)
-	String getExecutedTasks();
+	String getExecutedTasks(@QueryParam("startingPos") int startingPos);
 }
