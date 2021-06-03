@@ -104,7 +104,7 @@ public class ReplicationManager {
 				// if (!serverURL.equals(primaryServerURL) &&
 				// !znodePATHTOIGNORE.equals(serverURL)) {
 				String createSpreadsheetURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.OPERATION;
-				WebTarget target = client.target(createSpreadsheetURL);
+				WebTarget target = client.target(createSpreadsheetURL).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 				new Thread(() -> {
 					try {
 						Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
@@ -148,7 +148,7 @@ public class ReplicationManager {
 			if (!serverURL.equals(primaryServerURL)) {
 				String deleteSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
 				WebTarget target = client.target(deleteSpreadsheetURL).path(sheetId)
-						.path(ReplicationRestSpreadsheets.OPERATION);
+						.path(ReplicationRestSpreadsheets.OPERATION).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 				new Thread(() -> {
 					try {
 						Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
@@ -191,7 +191,7 @@ public class ReplicationManager {
 			if (!serverURL.equals(primaryServerURL)) {
 				String updateCellURL = serverURL + RestSpreadsheets.PATH;
 				WebTarget target = client.target(updateCellURL).path(sheetId).path(cell)
-						.path(ReplicationRestSpreadsheets.OPERATION);
+						.path(ReplicationRestSpreadsheets.OPERATION).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 				new Thread(() -> {
 					try {
 						Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
@@ -228,9 +228,6 @@ public class ReplicationManager {
 
 	public void shareSpreadsheet(String sheetId, String userId, Long version) {
 
-		System.out.println(
-				"------------------------------------- VOU PEDIR PARA DAR SHARE NOS SECUNDARIOS ---------------------------------------");
-
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 		AtomicInteger numberOfAcks = new AtomicInteger(0);
 
@@ -239,7 +236,7 @@ public class ReplicationManager {
 			if (!serverURL.equals(primaryServerURL)) {
 				String shareSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
 				WebTarget target = client.target(shareSpreadsheetURL).path(sheetId).path("share").path(userId)
-						.path(ReplicationRestSpreadsheets.OPERATION);
+						.path(ReplicationRestSpreadsheets.OPERATION).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 				new Thread(() -> {
 					try {
 						Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
@@ -282,7 +279,7 @@ public class ReplicationManager {
 			if (!serverURL.equals(primaryServerURL)) {
 				String unshareSpreadsheetURL = serverURL + RestSpreadsheets.PATH;
 				WebTarget target = client.target(unshareSpreadsheetURL).path(sheetId).path("share").path(userId)
-						.path(ReplicationRestSpreadsheets.OPERATION);
+						.path(ReplicationRestSpreadsheets.OPERATION).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 				new Thread(() -> {
 					try {
 						Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
@@ -326,7 +323,7 @@ public class ReplicationManager {
 				String deleteUserSpreadsheetsURL = serverURL + RestSpreadsheets.PATH;
 				WebTarget target = client.target(deleteUserSpreadsheetsURL)
 						.path(ReplicationRestSpreadsheets.DELETESHEETS).path(userId)
-						.path(ReplicationRestSpreadsheets.OPERATION);
+						.path(ReplicationRestSpreadsheets.OPERATION).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 				new Thread(() -> {
 					try {
 						Response r = target.request().header(RestSpreadsheets.HEADER_VERSION, version)
@@ -423,20 +420,24 @@ public class ReplicationManager {
 		for (String serverURL : existingServers) {
 			if (!serverURL.equals(ReplicationSpreadsheetsServer.serverURL)) {
 				String getTasksURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.TASKS;
-				WebTarget target = client.target(getTasksURL).queryParam("startingPos", startingPos);
+				WebTarget target = client.target(getTasksURL).queryParam("startingPos", startingPos).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 
 				System.out.println("MAKING A TASK REQUEST TO " + getTasksURL);
 
 				new Thread(() -> {
 					try {
 						Response r = target.request().accept(MediaType.APPLICATION_JSON).get();
-
+												
 						int ackNumber = numberOfAcks.getAndIncrement();
 
+						System.out.println("THREAD: RECEBI RESPOSTA " + ackNumber);
+						
 						if (r != null && isSuccessful(r)) {
+							System.out.println("RESPOSTA FOI SUCESSO");
+							
 							List<String[]> receivedTasks = json
 									.fromJson(r.readEntity(String.class), ExecutedTasks.class).getExecutedTasks();
-							updatedTasks.add(ackNumber, receivedTasks);
+							//updatedTasks.add(ackNumber, receivedTasks);
 							updatedTasks.add(receivedTasks);
 						} else {
 							if (r == null)
@@ -554,7 +555,7 @@ public class ReplicationManager {
 		WebTarget target;
 
 		String serverNotificationURL = primaryServerURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.PRIMARY;
-		target = client.target(serverNotificationURL);
+		target = client.target(serverNotificationURL).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 		Response r = target.request().accept(MediaType.APPLICATION_JSON).post(null);
 
 		if (r != null && r.getStatus() >= 200 && 300 > r.getStatus()) {

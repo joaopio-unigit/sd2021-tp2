@@ -20,5 +20,5 @@ SHEETS_PROXY_PORT=8080
 SHEETS_PROXY_EXTRA_ARGS=mysecret uiz15boz3dj0e94 m7c4iokhadmg8nm Wctw6I6wZIYAAAAAAAAAAW7GD6hb2rAuhv17gCfbbWJEOHl1RmjZo2nxTcEcDRA2
 SHEETS_REP_SERVER_MAINCLASS=tp1.server.rest.replication.ReplicationSpreadsheetsServer
 SHEETS_REP_PORT=8080
-SHEETS_REP_EXTRA_ARGS_FIRST=mysecret extra a passar ao primeiro servidor replicado
-SHEETS_REP_EXTRA_ARGS_OTHER=mysecret extra a passar ao outros servidores replicados
+SHEETS_REP_EXTRA_ARGS_FIRST=mysecret repsecret
+SHEETS_REP_EXTRA_ARGS_OTHER=mysecret repsecret

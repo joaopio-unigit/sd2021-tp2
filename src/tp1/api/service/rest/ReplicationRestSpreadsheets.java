@@ -33,7 +33,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	@Path(OPERATION)
 	@Consumes(MediaType.APPLICATION_JSON)
 	@Produces(MediaType.APPLICATION_JSON)
-	String createSpreadsheetOperation(Spreadsheet sheet, @HeaderParam(HEADER_VERSION) Long version);
+	String createSpreadsheetOperation(Spreadsheet sheet, @QueryParam("repSecret") String repSecret, @HeaderParam(HEADER_VERSION) Long version);
 
 	/**
 	 * Deletes a spreadsheet.  Only the owner can call this method.
@@ -47,7 +47,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@DELETE
 	@Path("/{sheetId}" + OPERATION)
-	void deleteSpreadsheetOperation(@PathParam("sheetId") String sheetId, @HeaderParam(HEADER_VERSION) Long version);
+	void deleteSpreadsheetOperation(@PathParam("sheetId") String sheetId, @QueryParam("repSecret") String repSecret, @HeaderParam(HEADER_VERSION) Long version);
 		
 	/**
 	 * Updates the raw values of some cells of a spreadsheet. 
@@ -66,7 +66,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	@PUT
 	@Path("/{sheetId}/{cell}" + OPERATION)
 	@Consumes(MediaType.APPLICATION_JSON)
-	void updateCellOperation( @PathParam("sheetId") String sheetId, @PathParam("cell") String cell, String rawValue, @HeaderParam(HEADER_VERSION) Long version);
+	void updateCellOperation( @PathParam("sheetId") String sheetId, @PathParam("cell") String cell, String rawValue, @QueryParam("repSecret") String repSecret, @HeaderParam(HEADER_VERSION) Long version);
 	
 	/**
 	 * Adds a new user to the list of shares of a spreadsheet. Only the owner can call this method.
@@ -84,7 +84,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@POST
 	@Path("/{sheetId}/share/{userId}" + OPERATION)
-	void shareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId, @HeaderParam(HEADER_VERSION) Long version);
+	void shareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId, @QueryParam("repSecret") String repSecret, @HeaderParam(HEADER_VERSION) Long version);
 	
 	/**
 	 * Removes a user from the list of shares of a spreadsheet. Only the owner can call this method.
@@ -100,7 +100,7 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@DELETE
 	@Path("/{sheetId}/share/{userId}" + OPERATION)
-	void unshareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId, @HeaderParam(HEADER_VERSION) Long version);
+	void unshareSpreadsheetOperation( @PathParam("sheetId") String sheetId, @PathParam("userId") String userId, @QueryParam("repSecret") String repSecret, @HeaderParam(HEADER_VERSION) Long version);
 	
 	/**
 	 * Removes all the Spreadsheets from the service that belong to the userId
@@ -112,19 +112,19 @@ public interface ReplicationRestSpreadsheets extends RestSpreadsheets{
 	 */
 	@DELETE
 	@Path(DELETESHEETS + "/{userId}" + OPERATION)
-	void deleteUserSpreadsheetsOperation(@PathParam("userId") String userId, @HeaderParam(HEADER_VERSION) Long version);
+	void deleteUserSpreadsheetsOperation(@PathParam("userId") String userId, @QueryParam("repSecret") String repSecret, @HeaderParam(HEADER_VERSION) Long version);
 	
 	/*
 	 * Notifies a server that he is now the primary server and must update it's content
 	 */
 	@POST
 	@Path(PRIMARY)
-	void primaryNodeNotification();
+	void primaryNodeNotification(@QueryParam("repSecret") String repSecret);
 
 	/*
 	 * Gets the list of executed Tasks from the server
 	 */
 	@GET
 	@Path(TASKS)
-	String getExecutedTasks(@QueryParam("startingPos") int startingPos);
+	String getExecutedTasks(@QueryParam("startingPos") int startingPos, @QueryParam("repSecret") String repSecret);
 }

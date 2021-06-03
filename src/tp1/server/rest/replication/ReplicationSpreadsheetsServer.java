@@ -26,24 +26,21 @@ public class ReplicationSpreadsheetsServer {
 		System.setProperty("java.util.logging.SimpleFormatter.format", "%4$s: %5$s\n");
 	}
 	
+	private static final String DEFAULT_SECRET = "defaultSecret";
+	
 	public static final int PORT = 8080;
 	public static final String SERVICE = "sheets";
 	public static String spreadsheetsDomain;
 	public static Discovery sheetsDiscovery;
 	public static String serverURL;
 	public static String serverSecret;
+	public static String replicationSecret;
 	
 	public static void main(String[] args) {
-		
-		/*
-		System.out.println("SOU UM SERVIDOR REPLICA E ESTOU A CORRER");
-		System.out.println("ARGUMENTOS:");
-		for(String arg : args)
-			System.out.println(arg);
-		*/
-		
+				
 		spreadsheetsDomain =  args.length > 0 ? args[0] : "?";
-		serverSecret =  args.length > 0 ? args[1] : "?";
+		serverSecret =  args.length > 1 ? args[1] : DEFAULT_SECRET;
+		replicationSecret = args.length > 2 ? args[2] : DEFAULT_SECRET;
 				
 		try {		
 		String ip = InetAddress.getLocalHost().getHostAddress();
@@ -54,26 +51,18 @@ public class ReplicationSpreadsheetsServer {
 		//HTTPS
 		serverURL = String.format("https://%s:%s/rest", ip, PORT);
 		
-		//System.out.println("PONTO1");
-		
 		ReplicationManager replicationM = ReplicationManager.getInstance();										//REPLICATION
 		replicationM.startZookeeper();
-		
-		//System.out.println("PONTO2");
 		
 		String serviceName = spreadsheetsDomain + ":" + SERVICE;
 		sheetsDiscovery = new Discovery(serviceName, serverURL, Discovery.DEFAULT);								//CRIAR O OBJETO DISCOVERY
 		
 		sheetsDiscovery.start();																				//COMECAR A ANUNCIAR O SERVICO
-
-		//System.out.println("PONTO3");
 		
 		ResourceConfig config = new ResourceConfig();
 		config.register(ReplicationSpreadsheetsResource.class);
 		config.register(new GenericExceptionMapper());
 		config.register(new VersionFilter(replicationM));														//REPLICATION
-	
-		//System.out.println("PONTO4");
 		
 		JdkHttpServerFactory.createHttpServer( URI.create(serverURL), config, SSLContext.getDefault());
 	
