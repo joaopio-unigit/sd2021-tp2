@@ -234,6 +234,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			return sheet;
 		} else {
 			Log.info(REDIRECTING_OUTDATED);
+			exec.execute(() -> {checkForUpdates(localVersionNumber);});
 			UriBuilder uriB = UriBuilder.newInstance();
 			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId)
 					.queryParam("userId", userId).queryParam("password", password);
@@ -337,6 +338,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			return sheetValues;
 		} else {
 			Log.info(REDIRECTING_OUTDATED);
+			exec.execute(() -> {checkForUpdates(localVersionNumber);});
 			UriBuilder uriB = UriBuilder.newInstance();
 			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path("values")
 					.queryParam("userId", userId).queryParam("password", password);
@@ -590,6 +592,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			return cellR.extractRangeValuesFrom(rangeValues);
 		} else {
 			Log.info(REDIRECTING_OUTDATED);
+			exec.execute(() -> {checkForUpdates(localVersionNumber);});
 			UriBuilder uriB = UriBuilder.newInstance();
 			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path(userId)
 					.path(range).queryParam("secret", secret);
