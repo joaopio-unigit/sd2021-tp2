@@ -25,6 +25,7 @@ public class UsersMiddleman {
 	private final static int REPLY_TIMEOUT = 10000;
 	private final static String TIMEOUT = "Connection timeout!!";
 	private final static String RETRY_CONNECTION = "Retrying to connect.";
+	private static final String ERROR_STATUS = "Error, HTTP error status: ";
 
 	private URI usersServerURI;
 	private WebTarget target;
@@ -62,7 +63,7 @@ public class UsersMiddleman {
 			return true;
 		} else {
 			if (r.getStatus() != Status.FORBIDDEN.getStatusCode())
-				System.out.println("Error, HTTP error status: " + r.getStatus());
+				System.out.println(ERROR_STATUS + r.getStatus());
 
 			return false;
 		}

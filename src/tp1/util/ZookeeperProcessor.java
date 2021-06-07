@@ -10,6 +10,8 @@ import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
 
 public class ZookeeperProcessor implements Watcher {
+	private static final String GETVALUE_ERROR = "Failed to get the znode value.";
+	
 	private ZooKeeper zk;
 	private static ZookeeperProcessor instance;
 
@@ -69,12 +71,11 @@ public class ZookeeperProcessor implements Watcher {
 	public String getValue(String path) {
 		String value = null;
 		try {
-			System.out.println("VOU PROCURAR EM " + path);
 			byte[] data = zk.getData(path, false, null);
 			if(data != null)
 				value = new String(data);
 		}catch(KeeperException | InterruptedException e) {
-			System.out.println("PROBLEMA A ACEDER AO NO");
+			System.out.println(GETVALUE_ERROR);
 		}
 		
 		return value;

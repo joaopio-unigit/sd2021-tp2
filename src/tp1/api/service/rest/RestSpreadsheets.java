@@ -57,6 +57,7 @@ public interface RestSpreadsheets {
 	 * @param sheetId - The  spreadsheet being retrieved.
 	 * @param userId - The user performing the operation.
 	 * @param password - The password of the user performing the operation.
+	 * @param version - version of the client that started the execution of the operation
 	 * 
 	 * @return 200 and the spreadsheet
 	 *		   404 if no sheet exists with the given sheetId, or the userId does not exist.
@@ -75,6 +76,7 @@ public interface RestSpreadsheets {
 	 * @param userId - The user requesting the values
 	 * @param sheetId - the spreadsheet whose values are being retrieved.
 	 * @param password - The password of the user performing the operation
+	 * @param version - version of the client that started the execution of the operation
 	 * 
 	 * @return 200, if the operation is successful
 	 * 		   403, if the spreadsheet is not shared with user, or the user is not the owner, or the password is incorrect.
@@ -152,6 +154,7 @@ public interface RestSpreadsheets {
 	 * Removes all the Spreadsheets from the service that belong to the userId
 	
 	 * @param userId - the userId who's sheets shall be forgotten
+	 * @param secret - secret stored by the servers that serves as authentication between servers
 	 * 
 	 * @return 204, in case of success.
 	 * 		   400, if userId is null
@@ -166,6 +169,8 @@ public interface RestSpreadsheets {
 	 * @param sheetId - the sheet with the values we want
 	 * @param userId - the user making the request
 	 * @param range - the range to import
+	 * @param secret - secret stored by the servers that serves as authentication between servers
+	 * @param version - version of the client that started the execution of the operation
 	 * 
 	 * @return 200, in case of success.
 	 * 		   400, if any of the arguments is null

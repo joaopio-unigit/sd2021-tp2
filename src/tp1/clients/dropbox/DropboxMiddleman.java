@@ -68,7 +68,7 @@ public class DropboxMiddleman {
 			return true;
 		}
 		else {
-			System.out.println("Failed to create directory for " + serverDomain);
+			System.out.printf("Failed to create directory for %s.\n", serverDomain);
 			return false;
 		}
 	}
@@ -91,7 +91,7 @@ public class DropboxMiddleman {
 			return true;
 		}
 		else {
-			System.out.println("Failed to create " + sheet.getSheetId());
+			System.out.printf("Failed to create %s.\n", sheet.getSheetId());
 			return false;
 		}
 	}
@@ -117,7 +117,7 @@ public class DropboxMiddleman {
 			return true;
 		}
 		else {
-			System.out.println("Failed to delete " + sheetId);
+			System.out.printf("Failed to delete %s.\n", sheetId);
 			return false;
 		}
 	}
@@ -140,7 +140,7 @@ public class DropboxMiddleman {
 		if (success)
 			System.out.println(sheetId + " downloaded successfuly.");
 		else
-			System.out.println("Failed to download " + sheetId);
+			System.out.printf("Failed to download %s.\n", sheetId);
 
 		return sheet;
 	}
@@ -187,7 +187,7 @@ public class DropboxMiddleman {
 			return true;
 		}
 		else {
-			System.out.println("Failed to delete " + serverDomain);
+			System.out.printf("Failed to delete %s.\n", serverDomain);
 			return false;
 		}
 	}

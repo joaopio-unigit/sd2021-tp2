@@ -29,6 +29,8 @@ public class SheetsMiddleman {
 	private final static String REQUEST = "Making a request to ";
 	private final static String TIMEOUT = "Connection timeout!!";
 	private final static String RETRY_CONNECTION = "Retrying to connect.";
+	private static final String SUCCESS = "Success";
+	private static final String ERROR_STATUS = "Error, HTTP error status: ";
 
 	private static final String GOOGLE_SHEETS_API_KEY = "AIzaSyDan0PpAHPQh0eEQ2NDc6qf1QxdzOzWVsg";
 	private static final String GOOGLE_SHEETS_PATH = "https://sheets.googleapis.com/v4/spreadsheets/";
@@ -62,8 +64,7 @@ public class SheetsMiddleman {
 		Client client = createClient();
 
 		WebTarget localTarget;
-		if (sheetURL.contains(GOOGLE_APIS)) { // DUVIDA - O RESTO FUNCIONA SEM PROBLEMAS???
-			System.out.println("FOLHA EM GOOGLE " + sheetURL);
+		if (sheetURL.contains(GOOGLE_APIS)) {
 			localTarget = getGoogleTarget(sheetURL, client, range);
 		}
 		else
@@ -83,6 +84,7 @@ public class SheetsMiddleman {
 				Response r = localTarget.request().accept(MediaType.APPLICATION_JSON).get(); // MAKING THE REQUEST
 
 				if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
+					System.out.println(SUCCESS);
 					if (sheetURL.contains(GOOGLE_APIS)) {
 						GoogleSheetsReturn googleSheet = json.fromJson(r.readEntity(String.class), GoogleSheetsReturn.class);
 						rangeValues = googleSheet.getValues();
@@ -90,7 +92,7 @@ public class SheetsMiddleman {
 					else	
 						rangeValues = r.readEntity(String[][].class);
 				} else
-					System.out.println("Error, HTTP error status: " + r.getStatus());
+					System.out.println(ERROR_STATUS + r.getStatus());
 
 				success = true;
 
@@ -118,9 +120,9 @@ public class SheetsMiddleman {
 				success = true;
 
 				if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
-					System.out.println("Success");
+					System.out.println(SUCCESS);
 				} else
-					System.out.println("Error, HTTP error status: " + r.getStatus());
+					System.out.println(ERROR_STATUS + r.getStatus());
 
 			} catch (ProcessingException pe) {
 				retries++;

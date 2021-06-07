@@ -131,12 +131,8 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.BAD_REQUEST);
 
 		checkValidUserId(userId);
-
-		System.out.println("USERID VALIDO");
 		
 		checkUserPassword(userId, password);
-
-		System.out.println("PASSWORD CORRETA");
 		
 		Spreadsheet sheet;
 

@@ -36,20 +36,22 @@ public class ReplicationManager {
 
 	private final static int CONNECTION_TIMEOUT = 10000;
 	private final static int REPLY_TIMEOUT = 10000;
+	
 	private static final String ZOO_ERROR = "Error on instantiating Zookeeper.";
 	private static final String ZOOKEEPER_HOSTPORT = "kafka:2181";
 	private static final String WAITING_FOR_SECONDARY = "Waiting for a secondary server acknowledge.";
+	private static final String ACK_RECEIVED = "One of the secundary servers acknowledged.";
 	private static final String THREAD_NULL = "THREAD: response is null.";
 	private static final String THREAD_STATUS = "THREAD: response status ";
 	private static final String THREAD_CONNECTION_TIMEOUT = "THREAD: connection timed out.";
 	private static final String PRIMARY_UPDATE_SUCCESS = "New primary server notified.";
 	private static final String PRIMARY_UPDATE_FAILURE = " Failed to notify new primary server.";
-	private static final String PRIMARY_SERVER = "PRIMARY SERVER URL: ";
+	private static final String PRIMARY_SERVER = "Primary server URL: ";
+	private static final String UNRECOGNIZED_TASK_TYPE = "Type of task not recognized when converting to JSON";
 	private static final String CREATED_NODE = "Created znode: ";
 	private static final String CREATED_CHILD_NODE = "Created child znode: ";
 	private static final String REPLICA_NODE_NAME = "replica";
-	// APAGAR
-	private static final String ACK_OUTPUT = "One of the secundary servers acknowledged.";
+	private static final String REQUEST = "Making a task request to ";
 
 	private static Logger Log = Logger.getLogger(ReplicationManager.class.getName());
 
@@ -63,9 +65,6 @@ public class ReplicationManager {
 	private List<Task> tasks;
 	private AtomicLong globalVersionNumber;
 	private Gson json;
-
-	// APAGAR
-	// String znodePATHTOIGNORE;
 
 	synchronized public static ReplicationManager getInstance() {
 		if (instance == null)
@@ -101,8 +100,6 @@ public class ReplicationManager {
 
 		for (String serverURL : existingServers) {
 			if (!serverURL.equals(primaryServerURL)) {
-				// if (!serverURL.equals(primaryServerURL) &&
-				// !znodePATHTOIGNORE.equals(serverURL)) {
 				String createSpreadsheetURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.OPERATION;
 				WebTarget target = client.target(createSpreadsheetURL).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 				new Thread(() -> {
@@ -121,7 +118,6 @@ public class ReplicationManager {
 							}
 						}
 					} catch (ProcessingException pe) {
-						numberOfAcks.getAndIncrement();
 						System.out.println(THREAD_CONNECTION_TIMEOUT);
 					}
 				}).start();
@@ -136,7 +132,7 @@ public class ReplicationManager {
 			System.out.println(WAITING_FOR_SECONDARY);
 		}
 
-		System.out.println(ACK_OUTPUT);
+		System.out.println(ACK_RECEIVED);
 	}
 
 	public void deleteSpreadsheet(String sheetId, Long version) {
@@ -164,7 +160,6 @@ public class ReplicationManager {
 							}
 						}
 					} catch (ProcessingException pe) {
-						numberOfAcks.getAndIncrement();
 						System.out.println(THREAD_CONNECTION_TIMEOUT);
 					}
 				}).start();
@@ -178,7 +173,7 @@ public class ReplicationManager {
 			}
 			System.out.println(WAITING_FOR_SECONDARY);
 		}
-		System.out.println(ACK_OUTPUT);
+		System.out.println(ACK_RECEIVED);
 
 	}
 
@@ -208,7 +203,6 @@ public class ReplicationManager {
 							}
 						}
 					} catch (ProcessingException pe) {
-						numberOfAcks.getAndIncrement();
 						System.out.println(THREAD_CONNECTION_TIMEOUT);
 					}
 				}).start();
@@ -222,7 +216,7 @@ public class ReplicationManager {
 			}
 			System.out.println(WAITING_FOR_SECONDARY);
 		}
-		System.out.println(ACK_OUTPUT);
+		System.out.println(ACK_RECEIVED);
 
 	}
 
@@ -252,7 +246,6 @@ public class ReplicationManager {
 							}
 						}
 					} catch (ProcessingException pe) {
-						numberOfAcks.getAndIncrement();
 						System.out.println(THREAD_CONNECTION_TIMEOUT);
 					}
 				}).start();
@@ -266,7 +259,7 @@ public class ReplicationManager {
 			}
 			System.out.println(WAITING_FOR_SECONDARY);
 		}
-		System.out.println(ACK_OUTPUT);
+		System.out.println(ACK_RECEIVED);
 
 	}
 
@@ -295,7 +288,6 @@ public class ReplicationManager {
 							}
 						}
 					} catch (ProcessingException pe) {
-						numberOfAcks.getAndIncrement();
 						System.out.println(THREAD_CONNECTION_TIMEOUT);
 					}
 				}).start();
@@ -309,7 +301,7 @@ public class ReplicationManager {
 			}
 			System.out.println(WAITING_FOR_SECONDARY);
 		}
-		System.out.println(ACK_OUTPUT);
+		System.out.println(ACK_RECEIVED);
 
 	}
 
@@ -339,7 +331,6 @@ public class ReplicationManager {
 							}
 						}
 					} catch (ProcessingException pe) {
-						numberOfAcks.getAndIncrement();
 						System.out.println(THREAD_CONNECTION_TIMEOUT);
 					}
 				}).start();
@@ -353,7 +344,7 @@ public class ReplicationManager {
 			}
 			System.out.println(WAITING_FOR_SECONDARY);
 		}
-		System.out.println(ACK_OUTPUT);
+		System.out.println(ACK_RECEIVED);
 
 	}
 
@@ -390,7 +381,7 @@ public class ReplicationManager {
 				tasksJsonRepresentation.add(updateTask);
 				break;
 			default:
-				System.out.println("Type of task not recognized when converting to JSON");
+				System.out.println(UNRECOGNIZED_TASK_TYPE);
 				break;
 			}
 
@@ -422,22 +413,15 @@ public class ReplicationManager {
 				String getTasksURL = serverURL + RestSpreadsheets.PATH + ReplicationRestSpreadsheets.TASKS;
 				WebTarget target = client.target(getTasksURL).queryParam("startingPos", startingPos).queryParam("repSecret", ReplicationSpreadsheetsServer.replicationSecret);
 
-				System.out.println("MAKING A TASK REQUEST TO " + getTasksURL);
+				System.out.println(REQUEST + getTasksURL);
 
 				new Thread(() -> {
 					try {
 						Response r = target.request().accept(MediaType.APPLICATION_JSON).get();
-												
-						int ackNumber = numberOfAcks.getAndIncrement();
-
-						System.out.println("THREAD: RECEBI RESPOSTA " + ackNumber);
-						
-						if (r != null && isSuccessful(r)) {
-							System.out.println("RESPOSTA FOI SUCESSO");
-							
+																		
+						if (r != null && isSuccessful(r)) {							
 							List<String[]> receivedTasks = json
 									.fromJson(r.readEntity(String.class), ExecutedTasks.class).getExecutedTasks();
-							//updatedTasks.add(ackNumber, receivedTasks);
 							updatedTasks.add(receivedTasks);
 						} else {
 							if (r == null)
@@ -446,11 +430,10 @@ public class ReplicationManager {
 								System.out.println(THREAD_STATUS + r.getStatus());
 							}
 						}
-
 					} catch (ProcessingException pe) {
-						numberOfAcks.getAndIncrement();
 						System.out.println(THREAD_CONNECTION_TIMEOUT);
 					}
+					numberOfAcks.incrementAndGet();
 				}).start();
 			}
 		}
@@ -529,11 +512,6 @@ public class ReplicationManager {
 				primaryServerURL = znodeURL;
 			}
 
-			/*
-			 * // APAGAR if (znode.contains("1")) { znodePATHTOIGNORE = znodeURL;
-			 * System.out.println("ADICIONEI O NODE PARA IGNORAR: " + znodePATHTOIGNORE); }
-			 */
-
 			// OBTER OS URLS QUANDO OCORREM ALTERACOES OFERECE MELHOR DESEMPENHO
 			existingServers.add(znodeURL);
 		}
@@ -562,11 +540,6 @@ public class ReplicationManager {
 			Log.info(PRIMARY_UPDATE_SUCCESS);
 		} else {
 			Log.info(PRIMARY_UPDATE_FAILURE);
-			/*
-			 * System.out.println("URI A TENTAR CONTACTAR " + target.getUri().toString());
-			 * if (r == null) System.out.println("R IS NULL"); else
-			 * System.out.println("STATUS DO R " + r.getStatus());
-			 */
 		}
 		System.out.println(PRIMARY_SERVER + primaryServerURL);
 	}

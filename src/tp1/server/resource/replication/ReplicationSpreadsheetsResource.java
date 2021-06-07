@@ -48,8 +48,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	private static final String REDIRECTING = "Request made to a secondary server. Redirecting...\n";
 	private static final String REDIRECTING_OUTDATED = "Request made to an outdated secondary server. Redirecting...\n";
+	private static final String UNRECOGNIZED_TASK = "Type of task not recognized" ;
 	private static final int TASK_TYPE_INDEX = 0;
 	private static final int TASK_JSON_INDEX = 1;
+
 
 	private final Map<String, Spreadsheet> spreadsheets;
 	private final Map<String, List<String>> owners;
@@ -89,7 +91,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public String createSpreadsheet(Spreadsheet sheet, String password) { // OPERACAO DE ESCRITA
-		System.out.println("CREATE");
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("createSpreadsheet : " + sheet + "; pwd = " + password);
 
@@ -116,7 +117,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 				// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 				Long taskAssignedVersion = replicationM.newTask(new CreateSpreadsheetTask(sheet));
-				System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
 
 				replicationM.createSpreadsheet(sheet, taskAssignedVersion);
 
@@ -152,7 +152,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public void deleteSpreadsheet(String sheetId, String password) { // OPERACAO DE ESCRITA
-		System.out.println("DELETE");
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("deleteSpreadsheet : sheet = " + sheetId + "; pwd = " + password);
 
@@ -171,7 +170,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			Long taskAssignedVersion = replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
-			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
 			replicationM.deleteSpreadsheet(sheetId, taskAssignedVersion);
 
 			spreadsheets.remove(sheetId);
@@ -189,7 +187,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public Spreadsheet getSpreadsheet(String sheetId, String userId, String password, Long version) { // OPERACAO DE
 																										// LEITURA
-		System.out.println("GET             VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || version == null
 				|| (version <= localVersionNumber)) {
 			Log.info("getSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
@@ -246,7 +243,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public String[][] getSpreadsheetValues(String sheetId, String userId, String password, Long version) { // OPERACAO
 																											// DE
 																											// LEITURA
-		System.out.println("GETVALUES         VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || version == null
 				|| (version <= localVersionNumber)) {
 
@@ -342,9 +338,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			UriBuilder uriB = UriBuilder.newInstance();
 			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path("values")
 					.queryParam("userId", userId).queryParam("password", password);
-
-			System.out.println("ESTOU DESATUALIZADO REDIRECT PARA " + uriB.build().toString());
-
 			throw new WebApplicationException(Response.temporaryRedirect(uriB.build()).build());
 		}
 	}
@@ -353,7 +346,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public void updateCell(String sheetId, String cell, String rawValue, String userId, String password) { // OPERACAO
 																											// DE
 																											// ESCRITA
-		System.out.println("UPDATE");
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("updateCell : " + cell + "; value = " + rawValue + "; sheet = " + sheetId + "; userId = " + userId
 					+ "; pwd = " + password);
@@ -389,7 +381,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public void shareSpreadsheet(String sheetId, String userId, String password) { // OPERACAO DE ESCRITA
-		System.out.println("SHARE");
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 
 			Log.info("shareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
@@ -446,7 +437,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public void unshareSpreadsheet(String sheetId, String userId, String password) { // OPERACAO DE ESCRITA
-		System.out.println("UNSHARE");
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("unshareSpreadsheet : " + sheetId + "; userId = " + userId + "; pwd = " + password);
 
@@ -483,7 +473,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			checkUserPassword(sheet.getOwner(), password);
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			Long taskAssignedVersion = replicationM.newTask(new UnshareSpreadsheetTask(sheetId, userId));
-			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
 			replicationM.unshareSpreadsheet(sheetId, userId, taskAssignedVersion);
 
 			sharedUsers.remove(userId);
@@ -500,7 +489,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	@Override
 	public void deleteUserSpreadsheets(String userId, String secret) { // OPERACAO DE ESCRITA
-		System.out.println("USERSHEETS");
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL)) {
 			Log.info("deleteUserSpreadsheets : " + userId);
 
@@ -509,7 +497,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			// MANDAR EXECUTAR PRIMEIRO NOS SECUNDARIOS
 			Long taskAssignedVersion = replicationM.newTask(new DeleteUserSpreadsheetsTask(userId));
-			System.out.println("TASK ADICIONADA   VERSAO " + taskAssignedVersion);
 			replicationM.deleteUserSpreadsheets(userId, taskAssignedVersion);
 
 			synchronized (this) {
@@ -533,8 +520,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public String[][] importRange(String sheetId, String userId, String range, String secret, Long version) { // OPERACAO
 																												// DE
 																												// LEITURA
-		System.out
-				.println("IMPORT             VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || version == null
 				|| (version <= localVersionNumber)) {
 			Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
@@ -605,24 +590,10 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public String createSpreadsheetOperation(Spreadsheet sheet, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
-
-		System.out
-				.println("CREATEOP             VERSAO:" + version + "         LOCAL: " + localVersionNumber.intValue());
+		
 		checkForUpdates(version);
 
-		/*
-		 * System.out.println("ESTOU NO SECUNDARIO ANTES DE ADICIONAR"); List<Task>
-		 * tasks = replicationM.tasks; for(Task t: tasks)
-		 * System.out.println(t.getClass().getSimpleName());
-		 */
-
 		replicationM.newTask(new CreateSpreadsheetTask(sheet));
-
-		/*
-		 * System.out.println("ESTOU NO SECUNDARIO DEPOIS DE ADICIONAR"); tasks =
-		 * replicationM.tasks; for(Task t: tasks)
-		 * System.out.println(t.getClass().getSimpleName());
-		 */
 
 		Log.info("createSpreadsheetOperation : " + sheet);
 
@@ -655,13 +626,11 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public void deleteSpreadsheetOperation(String sheetId, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
 
-		System.out.println(
-				"DELETEOP             VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
 		checkForUpdates(version);
-
-		replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
-
+		
 		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId);
+		
+		replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
 		spreadsheets.remove(sheetId);
 
 		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
@@ -671,9 +640,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public void updateCellOperation(String sheetId, String cell, String rawValue, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
-
-		System.out.println(
-				"UPDATEOP              VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
+		
 		checkForUpdates(version);
 
 		replicationM.newTask(new UpdateCellTask(sheetId, cell, rawValue));
@@ -693,9 +660,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public void shareSpreadsheetOperation(String sheetId, String userId, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
-
-		System.out.println(
-				"SHAREEOP             VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
 
 		checkForUpdates(version);
 
@@ -726,8 +690,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public void unshareSpreadsheetOperation(String sheetId, String userId, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
 
-		System.out.println(
-				"UNSHREOP              VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
 		checkForUpdates(version);
 
 		replicationM.newTask(new UnshareSpreadsheetTask(sheetId, userId));
@@ -757,8 +719,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	public void deleteUserSpreadsheetsOperation(String userId, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
 
-		System.out.println(
-				"USERSHEETSOP             VERSAO: " + version + "         LOCAL: " + localVersionNumber.intValue());
 		checkForUpdates(version);
 
 		replicationM.newTask(new DeleteUserSpreadsheetsTask(userId));
@@ -782,12 +742,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 		Log.info("primaryServerNotification");
 		List<String[]> missingTasks = replicationM.getMissingTasks(localVersionNumber.intValue());
-
-		System.out.println("RECEBI A LISTA JSON DAS TAREFAS");
-		for (String[] task : missingTasks) {
-			System.out.println("TAREFA " + task[1]);
-		}
-
 		executeTasks(missingTasks.subList(localVersionNumber.intValue(), missingTasks.size()));
 	}
 
@@ -887,24 +841,13 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	synchronized private void checkForUpdates(Long receivedVersion) {
 		if (receivedVersion > localVersionNumber) {
-			System.out.println("--------------- ESTOU ATRASADO --------------- VERSAO " + localVersionNumber.intValue()
-					+ " ----------------");
 			List<String[]> missingTasks = replicationM.getMissingTasks(localVersionNumber.intValue());
-			System.out.println("RECEBI AS SEGUINTES TAREFAS PARA EU ME ATUALIZAR: ");
-			for (String[] task : missingTasks) {
-				System.out.println("TAREFA A EXECUTAR " + task[0]);
-			}
-
+			
 			executeTasks(missingTasks.subList(0, missingTasks.size() - 1));
 		}
 	}
 
 	private void executeTasks(List<String[]> missingTasks) {
-
-		System.out.println("RECEBI A LISTA JSON DAS TAREFAS PARA EXECUTAR");
-		for (String[] task : missingTasks) {
-			System.out.println("TAREFA A EXECUTAR " + task[0]);
-		}
 
 		for (String[] taskJsonRepresentation : missingTasks) {
 			Tasks taskType = Tasks.valueOf(taskJsonRepresentation[TASK_TYPE_INDEX]);
@@ -944,7 +887,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 						ReplicationSpreadsheetsServer.replicationSecret, localVersionNumber);
 				break;
 			default:
-				System.out.println("Type of task not recognized");
+				System.out.println(UNRECOGNIZED_TASK);
 				break;
 			}
 		}
