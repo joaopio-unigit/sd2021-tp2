@@ -27,12 +27,16 @@ import tp1.util.Discovery;
 @Singleton
 public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 
-	private static final boolean CLIENT_DEFAULT_RETRIES = false;
-
 	private static final String SHEET_ID_DELIMITER = "--";
+	private static final String SAME_TW = "SAME TW";
 
-	private final Map<String, Map<String, String[][]>> cache;
-	private ExecutorService exec;
+
+	private final Map<String, Map<String, String[][]>> cache; //CACHE
+	private final Map<String, Map<String, Timestamp>> ttls;	//CACHE
+	private final Map<String, Timestamp> TWserver; //CACHE
+	private final Map<String, Timestamp> TWclient; //CACHE
+	private final long validTime = 20000; //CACHE
+	private ExecutorService exec; //CACHE
 
 	private static Logger Log = Logger.getLogger(DropboxSpreadsheetsResource.class.getName());
 
@@ -42,8 +46,11 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	private DropboxMiddleman dropboxM;
 
 	public DropboxSpreadsheetsResource() {
-		cache = new HashMap<String, Map<String, String[][]>>();
-		exec = Executors.newCachedThreadPool();
+		cache = new HashMap<String, Map<String, String[][]>>();	//CACHE
+		ttls = new HashMap<String, Map<String, Timestamp>>(); //CACHE
+		TWserver = new HashMap<String, Timestamp>(); //CACHE
+		TWclient = new HashMap<String, Timestamp>(); //CACHE
+		exec = Executors.newCachedThreadPool(); //CACHE
 
 		discovery = DropboxSpreadsheetsServer.sheetsDiscovery;
 		usersM = new UsersMiddleman();
@@ -94,7 +101,9 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 				Log.info("Failed to create spreadsheet in Dropbox.");
 				throw new WebApplicationException(Status.BAD_REQUEST);
 			}
-
+			
+			TWserver.put(sheetURL, new Timestamp(System.currentTimeMillis()) );
+			
 			return sheetID;
 		} else {
 			Log.info("Password is incorrect.");
@@ -122,6 +131,8 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			Log.info("Failed to delete spreadsheet in Dropbox.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
+		
+		TWserver.remove(sheet.getSheetURL());
 	}
 
 	@Override
@@ -223,29 +234,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 
 				String userIdDomain = sheetOwner + "@" + DropboxSpreadsheetsServer.spreadsheetsDomain;
 
-				boolean rangeStoredInCache = false;
-
-				if (cache.get(sheetURL) != null) {
-					if (cache.get(sheetURL).get(range) != null) {
-						rangeStoredInCache = true;
-					}
-				}
-
-				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-						rangeStoredInCache, null, DropboxSpreadsheetsServer.serverSecret);
-
-				if (sheetValues != null) {
-
-					exec.execute(() -> {
-						insertNewValuesInCache(sheetURL, range, sheetValues);
-					});
-				} else {
-					Map<String, String[][]> cachedSheetValues = cache.get(sheetURL);
-					if (cachedSheetValues != null)
-						return cachedSheetValues.get(range);
-				}
-
-				return sheetValues;
+				return getSpreadsheetImportRanges(sheetURL, range, userIdDomain);
 			}
 		});
 
@@ -273,6 +262,8 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			Log.info("Failed to upload spreadsheet to Dropbox.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
+		
+		TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
 	}
 
 	@Override
@@ -317,6 +308,8 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			Log.info("Failed to upload spreadsheet to Dropbox.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
+		
+		TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
 	}
 
 	@Override
@@ -361,6 +354,8 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			Log.info("Failed to upload spreadsheet to Dropbox.");
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
+		
+		TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
 	}
 
 	@Override
@@ -391,6 +386,9 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 		if (!sheet.getSharedWith().contains(userId))
 			throw new WebApplicationException(Status.FORBIDDEN);
 
+		if(TWserver.get(sheet.getSheetURL()) != null && twClient != null && TWserver.get(sheet.getSheetURL()).compareTo(twClient) == 0) 
+			return new String[][] {{SAME_TW}};
+		
 		CellRange cellR = new CellRange(range);
 
 		String[][] rangeValues = SpreadsheetEngineImpl.getInstance()
@@ -420,16 +418,25 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 					public String[][] getRangeValues(String sheetURL, String range) {
 						String userIdDomain = sheet.getOwner() + "@" + DropboxSpreadsheetsServer.spreadsheetsDomain;
 
-						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-								CLIENT_DEFAULT_RETRIES, null, DropboxSpreadsheetsServer.serverSecret);
-
-						return sheetValues;
+						return getSpreadsheetImportRanges(sheetURL, range, userIdDomain);
 					}
 				});
 
 		return cellR.extractRangeValuesFrom(rangeValues);
 	}
 
+	@Override
+	public Timestamp getTWServer(String sheetURL, String secret) {
+		if(!secret.equals(DropboxSpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
+		Timestamp twServer = TWserver.get(sheetURL);
+		if(twServer == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
+		return twServer;
+	}
+	
 	// METODOS PRIVADOS
 
 	private void setUsersMiddlemanURI(String domain) {
@@ -469,18 +476,31 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 		sheetsM.setSheetsServerURI(uris[0]);
 	}
 
-	private void insertNewValuesInCache(String sheetId, String range, String[][] newRangeValues) {
+	private void insertNewValuesInCache(String sheetURL, String range, String[][] newRangeValues) {
 
-		Map<String, String[][]> sheetCachedRanges = cache.get(sheetId);
-		if (sheetCachedRanges == null) {
+		Map<String, String[][]> sheetCachedRanges = cache.get(sheetURL);
+		if(sheetCachedRanges == null) {
 			sheetCachedRanges = new HashMap<String, String[][]>();
 		}
-
+		
 		sheetCachedRanges.put(range, newRangeValues);
-
-		cache.put(sheetId, sheetCachedRanges);
+		
+		cache.put(sheetURL, sheetCachedRanges);
+		
+		updateTTLs(sheetURL, range);
 	}
-
+	
+	private void updateTTLs(String sheetURL, String range) {
+		Map<String, Timestamp> sheetRangesTimestamps = ttls.get(sheetURL);
+		if(sheetRangesTimestamps == null) {
+			sheetRangesTimestamps = new HashMap<String, Timestamp>();
+		}	
+		
+		sheetRangesTimestamps.put(range, new Timestamp(System.currentTimeMillis() + validTime));
+		
+		ttls.put(sheetURL, sheetRangesTimestamps);
+	}
+	
 	private void checkValidUserId(String userId) {
 		if (!usersM.hasUser(userId, DropboxSpreadsheetsServer.serverSecret)) {
 			Log.info("UserId invalid.");
@@ -504,11 +524,61 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
 	}
+	
+	private String[][] getSpreadsheetImportRanges(String sheetURL, String range, String userIdDomain) {
+		
+		boolean rangeStoredInCache = false;
+		boolean validCachedRange = false;
+		
+		Timestamp currTimestamp = new Timestamp(System.currentTimeMillis());
 
-	@Override
-	public Timestamp getTWServer(String sheetURL, String secret) {
-		Log.info("Not available");
-		return null;
+		if(ttls.get(sheetURL) != null) {
+			Timestamp rangeTTL = ttls.get(sheetURL).get(range); 
+			if(rangeTTL != null) {
+				rangeStoredInCache = true;
+				
+				if(rangeTTL.compareTo(currTimestamp) >= 0)
+					validCachedRange = true;
+			}
+		}		
+		
+		String[][] sheetValues;
+		
+		if(validCachedRange) {
+			//IR BUSCAR A CACHE OS VALORES E UTILIZAR
+			sheetValues = cache.get(sheetURL).get(range);
+		}
+		else {
+			Timestamp twClient = TWclient.get(sheetURL);					
+			
+			//IR BUSCAR NOVOS VALORES
+			sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache, twClient, DropboxSpreadsheetsServer.serverSecret);
+		
+			//SE CONSEGUIU CONTACTAR O SERVIDOR
+			if(sheetValues != null) {
+				if(sheetValues[0][0].equals(SAME_TW)) {
+					//UPDATE DO Tc
+					updateTTLs(sheetURL, range);
+					return cache.get(sheetURL).get(range);
+				}
+				else {
+					//GUARDA NOVOS VALORES EM CACHE
+					exec.execute(()-> {insertNewValuesInCache(sheetURL, range, sheetValues);});
+					//INSERE O NOVO TW-CLIENT
+					TWclient.put(sheetURL, sheetsM.getTWServer(sheetURL, DropboxSpreadsheetsServer.serverSecret));
+					//RETORNA OS NOVOS VALORES
+				}
+			}
+			else {
+				//VAI BUSCAR OS VALORES NAO VALIDOS
+				//SE HAVIA VALORES GUARDADOS EM CACHE
+				if(rangeStoredInCache)
+					return cache.get(sheetURL).get(range);
+				else
+					return null;
+			}
+		}
+		
+		return sheetValues;
 	}
-
 }

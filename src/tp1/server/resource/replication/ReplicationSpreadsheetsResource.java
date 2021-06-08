@@ -45,19 +45,23 @@ import tp1.util.Discovery;
 @Singleton
 public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadsheets {
 
-	private static final boolean CLIENT_DEFAULT_RETRIES = false;
-
 	private static final String REDIRECTING = "Request made to a secondary server. Redirecting...\n";
 	private static final String REDIRECTING_OUTDATED = "Request made to an outdated secondary server. Redirecting...\n";
 	private static final String UNRECOGNIZED_TASK = "Type of task not recognized";
+	private static final String SAME_TW = "SAME TW";
+	
 	private static final int TASK_TYPE_INDEX = 0;
 	private static final int TASK_JSON_INDEX = 1;
 
 	private final Map<String, Spreadsheet> spreadsheets;
 	private final Map<String, List<String>> owners;
 
-	private final Map<String, Map<String, String[][]>> cache; // CACHE
-	private ExecutorService exec; // CACHE
+	private final Map<String, Map<String, String[][]>> cache; //CACHE
+	private final Map<String, Map<String, Timestamp>> ttls;	//CACHE
+	private final Map<String, Timestamp> TWserver; //CACHE
+	private final Map<String, Timestamp> TWclient; //CACHE
+	private final long validTime = 20000; //CACHE
+	private ExecutorService exec; //CACHE
 
 	private static Logger Log = Logger.getLogger(ReplicationSpreadsheetsResource.class.getName());
 
@@ -74,8 +78,11 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		spreadsheets = new HashMap<String, Spreadsheet>();
 		owners = new HashMap<String, List<String>>();
 
-		cache = new HashMap<String, Map<String, String[][]>>(); // CACHE
-		exec = Executors.newCachedThreadPool(); // CACHE
+		cache = new HashMap<String, Map<String, String[][]>>();	//CACHE
+		ttls = new HashMap<String, Map<String, Timestamp>>(); //CACHE
+		TWserver = new HashMap<String, Timestamp>(); //CACHE
+		TWclient = new HashMap<String, Timestamp>(); //CACHE
+		exec = Executors.newCachedThreadPool(); //CACHE
 
 		discovery = ReplicationSpreadsheetsServer.sheetsDiscovery;
 		usersM = new UsersMiddleman();
@@ -137,6 +144,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 				updateLocalVersionNumber();
 
+				TWserver.put(sheetURL, new Timestamp(System.currentTimeMillis()) );
+				
 				return sheetID;
 			} else {
 				Log.info("Password is incorrect.");
@@ -174,6 +183,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			spreadsheets.remove(sheetId);
 
+			TWserver.remove(sheet.getSheetURL());
+			
 			updateLocalVersionNumber();
 		} else {
 			Log.info(REDIRECTING);
@@ -307,29 +318,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 					String userIdDomain = sheetOwner + "@" + ReplicationSpreadsheetsServer.spreadsheetsDomain;
 
-					boolean rangeStoredInCache = false;
-
-					if (cache.get(sheetURL) != null) {
-						if (cache.get(sheetURL).get(range) != null) {
-							rangeStoredInCache = true;
-						}
-					}
-
-					String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-							rangeStoredInCache, null, ReplicationSpreadsheetsServer.serverSecret);
-
-					if (sheetValues != null) {
-
-						exec.execute(() -> {
-							insertNewValuesInCache(sheetURL, range, sheetValues);
-						});
-					} else {
-						Map<String, String[][]> cachedSheetValues = cache.get(sheetURL);
-						if (cachedSheetValues != null)
-							return cachedSheetValues.get(range);
-					}
-
-					return sheetValues;
+					return getSpreadsheetImportRanges(sheetURL, range, userIdDomain);
 				}
 			});
 
@@ -373,6 +362,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			sheet.setCellRawValue(cell, rawValue);
 
+			TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
+			
 			updateLocalVersionNumber();
 		} else {
 			Log.info(REDIRECTING);
@@ -429,6 +420,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
 
+			TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
+			
 			updateLocalVersionNumber();
 		} else {
 			Log.info(REDIRECTING);
@@ -481,6 +474,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			sharedUsers.remove(userId);
 
+			TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
+			
 			updateLocalVersionNumber();
 		} else {
 			Log.info(REDIRECTING);
@@ -507,7 +502,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				List<String> userIdSheets = owners.remove(userId);
 
 				for (String sheetId : userIdSheets) {
-					spreadsheets.remove(sheetId);
+					Spreadsheet removedSpreadsheet = spreadsheets.remove(sheetId);
+					TWserver.remove(removedSpreadsheet.getSheetURL());
 				}
 			}
 			updateLocalVersionNumber();
@@ -541,6 +537,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			if (!sheet.getSharedWith().contains(userId))
 				throw new WebApplicationException(Status.FORBIDDEN);
 
+			if(TWserver.get(sheet.getSheetURL()) != null && twClient != null && TWserver.get(sheet.getSheetURL()).compareTo(twClient) == 0) 
+				return new String[][] {{SAME_TW}};
+			
 			CellRange cellR = new CellRange(range);
 
 			String[][] rangeValues = SpreadsheetEngineImpl.getInstance()
@@ -571,10 +570,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 							String userIdDomain = sheet.getOwner() + "@"
 									+ ReplicationSpreadsheetsServer.spreadsheetsDomain;
 
-							String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-									CLIENT_DEFAULT_RETRIES, null, ReplicationSpreadsheetsServer.serverSecret);
-
-							return sheetValues;
+							return getSpreadsheetImportRanges(sheetURL, range, userIdDomain);
 						}
 					});
 
@@ -623,6 +619,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 			sheetOwnerSheets.add(sheetID);
 		}
+		
+		TWserver.put(sheetURL, new Timestamp(System.currentTimeMillis()) );
+		
 		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
 		updateLocalVersionNumber();
 		return sheetID;
@@ -637,7 +636,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId);
 
 		replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
-		spreadsheets.remove(sheetId);
+		Spreadsheet removedSpreadsheet = spreadsheets.remove(sheetId);
+		TWserver.remove(removedSpreadsheet.getSheetURL());
 
 		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
 		updateLocalVersionNumber();
@@ -657,8 +657,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			Spreadsheet sheet = spreadsheets.get(sheetId);
 			checkIfSheetExists(sheet);
 			sheet.setCellRawValue(cell, rawValue);
+			TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
 		}
-
+		
 		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
 		updateLocalVersionNumber();
 	}
@@ -688,6 +689,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		}
 
 		sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
+		
+		TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
+		
 		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
 		updateLocalVersionNumber();
 	}
@@ -717,6 +721,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		}
 
 		sharedUsers.remove(userId);
+		
+		TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()) );
+		
 		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
 		updateLocalVersionNumber();
 	}
@@ -735,7 +742,8 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			List<String> userIdSheets = owners.remove(userId);
 
 			for (String sheetId : userIdSheets) {
-				spreadsheets.remove(sheetId);
+				Spreadsheet removedSpreadhsheet = spreadsheets.remove(sheetId);
+				TWserver.remove(removedSpreadhsheet.getSheetURL());
 			}
 		}
 		// ATUALIZA A VERSAO LOCAL NOS SECUNDARIOS
@@ -759,6 +767,18 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		return json.toJson(new ExecutedTasks(replicationM.getExecutedTasks(startingPos)));
 	}
 
+	@Override
+	public Timestamp getTWServer(String sheetURL, String secret) {
+		if(!secret.equals(ReplicationSpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
+		Timestamp twServer = TWserver.get(sheetURL);
+		if(twServer == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
+		return twServer;
+	}
+	
 	// METODOS PRIVADOS
 
 	private void setUsersMiddlemanURI(String domain) {
@@ -798,18 +818,31 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		sheetsM.setSheetsServerURI(uris[0]);
 	}
 
-	private void insertNewValuesInCache(String sheetId, String range, String[][] newRangeValues) {
+	private void insertNewValuesInCache(String sheetURL, String range, String[][] newRangeValues) {
 
-		Map<String, String[][]> sheetCachedRanges = cache.get(sheetId);
-		if (sheetCachedRanges == null) {
+		Map<String, String[][]> sheetCachedRanges = cache.get(sheetURL);
+		if(sheetCachedRanges == null) {
 			sheetCachedRanges = new HashMap<String, String[][]>();
 		}
-
+		
 		sheetCachedRanges.put(range, newRangeValues);
-
-		cache.put(sheetId, sheetCachedRanges);
+		
+		cache.put(sheetURL, sheetCachedRanges);
+		
+		updateTTLs(sheetURL, range);
 	}
 
+	private void updateTTLs(String sheetURL, String range) {
+		Map<String, Timestamp> sheetRangesTimestamps = ttls.get(sheetURL);
+		if(sheetRangesTimestamps == null) {
+			sheetRangesTimestamps = new HashMap<String, Timestamp>();
+		}	
+		
+		sheetRangesTimestamps.put(range, new Timestamp(System.currentTimeMillis() + validTime));
+		
+		ttls.put(sheetURL, sheetRangesTimestamps);
+	}
+	
 	private void checkValidUserId(String userId) {
 		if (!usersM.hasUser(userId, ReplicationSpreadsheetsServer.serverSecret)) {
 			Log.info("UserId invalid.");
@@ -839,6 +872,63 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			throw new WebApplicationException(Status.BAD_REQUEST);
 	}
 
+	private String[][] getSpreadsheetImportRanges(String sheetURL, String range, String userIdDomain) {
+		
+		boolean rangeStoredInCache = false;
+		boolean validCachedRange = false;
+		
+		Timestamp currTimestamp = new Timestamp(System.currentTimeMillis());
+
+		if(ttls.get(sheetURL) != null) {
+			Timestamp rangeTTL = ttls.get(sheetURL).get(range); 
+			if(rangeTTL != null) {
+				rangeStoredInCache = true;
+				
+				if(rangeTTL.compareTo(currTimestamp) >= 0)
+					validCachedRange = true;
+			}
+		}		
+		
+		String[][] sheetValues;
+		
+		if(validCachedRange) {
+			//IR BUSCAR A CACHE OS VALORES E UTILIZAR
+			sheetValues = cache.get(sheetURL).get(range);
+		}
+		else {
+			Timestamp twClient = TWclient.get(sheetURL);					
+			
+			//IR BUSCAR NOVOS VALORES
+			sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache, twClient, ReplicationSpreadsheetsServer.serverSecret);
+		
+			//SE CONSEGUIU CONTACTAR O SERVIDOR
+			if(sheetValues != null) {
+				if(sheetValues[0][0].equals(SAME_TW)) {
+					//UPDATE DO Tc
+					updateTTLs(sheetURL, range);
+					return cache.get(sheetURL).get(range);
+				}
+				else {
+					//GUARDA NOVOS VALORES EM CACHE
+					exec.execute(()-> {insertNewValuesInCache(sheetURL, range, sheetValues);});
+					//INSERE O NOVO TW-CLIENT
+					TWclient.put(sheetURL, sheetsM.getTWServer(sheetURL, ReplicationSpreadsheetsServer.serverSecret));
+					//RETORNA OS NOVOS VALORES
+				}
+			}
+			else {
+				//VAI BUSCAR OS VALORES NAO VALIDOS
+				//SE HAVIA VALORES GUARDADOS EM CACHE
+				if(rangeStoredInCache)
+					return cache.get(sheetURL).get(range);
+				else
+					return null;
+			}
+		}
+		
+		return sheetValues;
+	}
+	
 	// GESTAO DE VERSAO
 
 	synchronized private void updateLocalVersionNumber() {
@@ -897,12 +987,6 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				break;
 			}
 		}
-	}
-
-	@Override
-	public Timestamp getTWServer(String sheetURL, String secret) {
-		Log.info("Not available");
-		return null;
 	}
 
 }

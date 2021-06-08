@@ -32,7 +32,6 @@ import tp1.util.Discovery;
 @Singleton
 public class SpreadsheetsResource implements RestSpreadsheets {
 
-	//private static final boolean CLIENT_DEFAULT_RETRIES = false;
 	private static final String SAME_TW = "SAME TW";
 	
 	private final Map<String, Spreadsheet> spreadsheets;

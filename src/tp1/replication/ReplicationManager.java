@@ -34,7 +34,7 @@ import tp1.util.ZookeeperProcessor;
 
 public class ReplicationManager {
 
-	private final static int CONNECTION_TIMEOUT = 300;
+	private final static int CONNECTION_TIMEOUT = 10000;
 	private final static int REPLY_TIMEOUT = 10000;
 	
 	private static final String ZOO_ERROR = "Error on instantiating Zookeeper.";
