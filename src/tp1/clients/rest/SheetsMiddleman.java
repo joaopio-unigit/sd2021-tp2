@@ -1,6 +1,7 @@
 package tp1.clients.rest;
 
 import java.net.URI;
+import java.sql.Timestamp;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -58,7 +59,7 @@ public class SheetsMiddleman {
 	}
 
 	public String[][] getSpreadsheetValues(String sheetURL, String userId, String range, boolean rangeStoredInCache,
-			String serverSecret) {
+			Timestamp twClient, String serverSecret) {
 		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 
 		Client client = createClient();
@@ -68,9 +69,7 @@ public class SheetsMiddleman {
 			localTarget = getGoogleTarget(sheetURL, client, range);
 		}
 		else
-			localTarget = client.target(sheetURL).path(userId).path(range).queryParam("secret", serverSecret); // BUILDING
-																												// THE
-																												// PATH
+			localTarget = client.target(sheetURL).path(userId).path(range).queryParam("twclient", twClient).queryParam("secret", serverSecret); // BUILDING THE PATH
 
 		System.out.println(REQUEST + localTarget.getUri().toString());
 
@@ -106,7 +105,42 @@ public class SheetsMiddleman {
 		}
 		return rangeValues;
 	}
+	
+	public Timestamp getTWServer(String sheetURL, String serverSecret) {
+		HttpsURLConnection.setDefaultHostnameVerifier(new InsecureHostnameVerifier());
 
+		Client client = createClient();
+
+		WebTarget localTarget = client.target(sheetURL).path("cache").queryParam("secret", serverSecret); // BUILDING THE PATH
+		
+		System.out.println(REQUEST + localTarget.getUri().toString());
+
+		int retries = 0;
+		boolean success = false;
+		Timestamp twServer = null;
+		
+		while (!success && retries < MAX_RETRIES) {
+			try {
+
+				Response r = localTarget.request().accept(MediaType.APPLICATION_JSON).get(); // MAKING THE REQUEST
+
+				if (r.getStatus() == Status.OK.getStatusCode() && r.hasEntity()) {
+					System.out.println(SUCCESS);
+						twServer = r.readEntity(Timestamp.class);
+				} else
+					System.out.println(ERROR_STATUS + r.getStatus());
+
+				success = true;
+
+			} catch (ProcessingException pe) {
+				retries++;
+				connetionFailure(pe);
+			}
+		}
+		
+		return twServer;
+	}
+	
 	public void deleteUserSpreadsheets(String userId, String serverSecret) {
 
 		int retries = 0;

@@ -32,14 +32,18 @@ import tp1.util.Discovery;
 @Singleton
 public class SpreadsheetsResource implements RestSpreadsheets {
 
-	private static final boolean CLIENT_DEFAULT_RETRIES = false;
+	//private static final boolean CLIENT_DEFAULT_RETRIES = false;
+	private static final String SAME_TW = "SAME TW";
 	
 	private final Map<String, Spreadsheet> spreadsheets;
 	private final Map<String, List<String>> owners;
 
-	private final Map<String, Map<String, String[][]>> cache; // CACHE
+	private final Map<String, Map<String, String[][]>> cache; //CACHE
 	private final Map<String, Map<String, Timestamp>> ttls;	//CACHE
-	private ExecutorService exec; // CACHE
+	private final Map<String, Timestamp> TWserver; //CACHE
+	private final Map<String, Timestamp> TWclient; //CACHE
+	private final long validTime = 20000; //CACHE
+	private ExecutorService exec; //CACHE
 
 	private static Logger Log = Logger.getLogger(SpreadsheetsResource.class.getName());
 
@@ -53,7 +57,9 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 
 		cache = new HashMap<String, Map<String, String[][]>>();	//CACHE
 		ttls = new HashMap<String, Map<String, Timestamp>>(); //CACHE
-		exec = Executors.newCachedThreadPool(); // CACHE
+		TWserver = new HashMap<String, Timestamp>(); //CACHE
+		TWclient = new HashMap<String, Timestamp>(); //CACHE
+		exec = Executors.newCachedThreadPool(); //CACHE
 
 		discovery = SpreadsheetsServer.sheetsDiscovery;
 		usersM = new UsersMiddleman();
@@ -101,6 +107,8 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 
 			sheetOwnerSheets.add(sheetID);
 
+			TWserver.put(sheetURL, new Timestamp(System.currentTimeMillis()) );
+			
 			return sheetID;
 		} else {
 			Log.info("Password is incorrect.");
@@ -120,11 +128,12 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 		synchronized (this) {
 			sheet = spreadsheets.get(sheetId);
 
-			// 404
 			checkIfSheetExists(sheet);
 		}
 
 		checkUserPassword(sheet.getOwner(), password);
+		
+		TWserver.remove(sheet.getSheetURL());
 		
 		spreadsheets.remove(sheetId);
 	}
@@ -234,48 +243,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 
 				String userIdDomain = sheetOwner + "@" + SpreadsheetsServer.spreadsheetsDomain;
 
-				boolean rangeStoredInCache = false;
-				boolean validCachedRange = false;
-				
-				Timestamp currTimestamp = new Timestamp(System.currentTimeMillis());
-
-				if(ttls.get(sheetURL) != null) {
-					Timestamp rangeTTL = ttls.get(sheetURL).get(range); 
-					if(rangeTTL != null) {
-						rangeStoredInCache = true;
-						
-						if(rangeTTL.compareTo(currTimestamp) >= 0)
-							validCachedRange = true;
-					}
-				}		
-				
-				String[][] sheetValues;
-				
-				if(validCachedRange) {
-					//IR BUSCAR A CACHE OS VALORES E UTILIZAR
-					sheetValues = cache.get(sheetURL).get(range);
-				}
-				else {
-					//IR BUSCAR NOVOS VALORES
-					sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache, SpreadsheetsServer.serverSecret);
-				
-					//SE CONSEGUIU CONTACTAR O SERVIDOR
-					if(sheetValues != null) {
-						//GUARDA NOVOS VALORES EM CACHE
-						exec.execute(()-> {insertNewValuesInCache(sheetURL, range, sheetValues);});
-						//RETORNA OS NOVOS VALORES
-					}
-					else {
-						//VAI BUSCAR OS VALORES NAO VALIDOS
-						//SE HAVIA VALORES GUARDADOS EM CACHE
-						if(rangeStoredInCache)
-							return cache.get(sheetURL).get(range);
-						else
-							return null;
-					}
-				}
-				
-				return sheetValues;
+				return getSpreadsheetImportRanges(sheetURL, range, userIdDomain);
 			}
 		});
 
@@ -299,6 +267,8 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 			checkIfSheetExists(sheet);
 
 			sheet.setCellRawValue(cell, rawValue);
+			
+			TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()));
 		}
 	}
 
@@ -339,7 +309,9 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.CONFLICT);
 		}
 
+		
 		sharedUsers.add(userId); // ADICIONA O UTILIZADOR X OU ENTAO X@DOMAIN SE PERTENCER A OUTRO DOMINIO
+		TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()));
 	}
 
 	@Override
@@ -379,7 +351,7 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 		checkUserPassword(sheet.getOwner(), password);
 
 		sharedUsers.remove(userId);
-
+		TWserver.put(sheet.getSheetURL(), new Timestamp(System.currentTimeMillis()));
 	}
 
 	@Override
@@ -392,12 +364,13 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 		List<String> userIdSheets = owners.remove(userId);
 
 		for (String sheetId : userIdSheets) {
-			spreadsheets.remove(sheetId);
+			Spreadsheet removedSpreadsheet = spreadsheets.remove(sheetId);
+			TWserver.remove(removedSpreadsheet.getSheetURL());
 		}
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret, Long version) {
+	public String[][] importRange(String sheetId, String userId, String range, Timestamp twClient, String secret,  Long version) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
 		if(!secret.equals(SpreadsheetsServer.serverSecret))
@@ -409,7 +382,10 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 
 		if (!sheet.getSharedWith().contains(userId))
 			throw new WebApplicationException(Status.FORBIDDEN);
-
+		
+		if(TWserver.get(sheet.getSheetURL()) != null && twClient != null && TWserver.get(sheet.getSheetURL()).compareTo(twClient) == 0) 
+			return new String[][] {{SAME_TW}};
+		
 		CellRange cellR = new CellRange(range);
 
 		String[][] rangeValues = SpreadsheetEngineImpl.getInstance()
@@ -438,16 +414,27 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 					@Override
 					public String[][] getRangeValues(String sheetURL, String range) {
 						String userIdDomain = sheet.getOwner() + "@" + SpreadsheetsServer.spreadsheetsDomain;
-
-						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, CLIENT_DEFAULT_RETRIES, SpreadsheetsServer.serverSecret);
-
-						return sheetValues;
+						
+						return getSpreadsheetImportRanges(sheetURL, range, userIdDomain);
 					}
 				});
 		
 		return cellR.extractRangeValuesFrom(rangeValues);
 	}
 
+	@Override
+	public Timestamp getTWServer(String sheetURL, String secret) {
+		if(!secret.equals(SpreadsheetsServer.serverSecret))
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
+		Timestamp twServer = TWserver.get(sheetURL);
+		if(twServer == null)
+			throw new WebApplicationException(Status.BAD_REQUEST);
+		
+		return twServer;
+	}
+	
+	//METODOS PRIVADOS
 	
 	private void setUsersMiddlemanURI(String domain) {
 
@@ -486,26 +473,29 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 		sheetsM.setSheetsServerURI(uris[0]);
 	}
 
-	private void insertNewValuesInCache(String sheetId, String range, String[][] newRangeValues) {
+	private void insertNewValuesInCache(String sheetURL, String range, String[][] newRangeValues) {
 		
-		Map<String, String[][]> sheetCachedRanges = cache.get(sheetId);
+		Map<String, String[][]> sheetCachedRanges = cache.get(sheetURL);
 		if(sheetCachedRanges == null) {
 			sheetCachedRanges = new HashMap<String, String[][]>();
 		}
 		
 		sheetCachedRanges.put(range, newRangeValues);
 		
-		cache.put(sheetId, sheetCachedRanges);
+		cache.put(sheetURL, sheetCachedRanges);
 		
-		Map<String, Timestamp> sheetRangesTimestamps = ttls.get(sheetId);
+		updateTTLs(sheetURL, range);
+	}
+
+	private void updateTTLs(String sheetURL, String range) {
+		Map<String, Timestamp> sheetRangesTimestamps = ttls.get(sheetURL);
 		if(sheetRangesTimestamps == null) {
 			sheetRangesTimestamps = new HashMap<String, Timestamp>();
-		}
+		}	
 		
-		long validTime = 20000;
 		sheetRangesTimestamps.put(range, new Timestamp(System.currentTimeMillis() + validTime));
 		
-		ttls.put(sheetId, sheetRangesTimestamps);
+		ttls.put(sheetURL, sheetRangesTimestamps);
 	}
 
 	private void checkValidUserId(String userId) {
@@ -531,4 +521,62 @@ public class SpreadsheetsResource implements RestSpreadsheets {
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
 	}
+
+	private String[][] getSpreadsheetImportRanges(String sheetURL, String range, String userIdDomain) {
+		
+		boolean rangeStoredInCache = false;
+		boolean validCachedRange = false;
+		
+		Timestamp currTimestamp = new Timestamp(System.currentTimeMillis());
+
+		if(ttls.get(sheetURL) != null) {
+			Timestamp rangeTTL = ttls.get(sheetURL).get(range); 
+			if(rangeTTL != null) {
+				rangeStoredInCache = true;
+				
+				if(rangeTTL.compareTo(currTimestamp) >= 0)
+					validCachedRange = true;
+			}
+		}		
+		
+		String[][] sheetValues;
+		
+		if(validCachedRange) {
+			//IR BUSCAR A CACHE OS VALORES E UTILIZAR
+			sheetValues = cache.get(sheetURL).get(range);
+		}
+		else {
+			Timestamp twClient = TWclient.get(sheetURL);					
+			
+			//IR BUSCAR NOVOS VALORES
+			sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range, rangeStoredInCache, twClient, SpreadsheetsServer.serverSecret);
+		
+			//SE CONSEGUIU CONTACTAR O SERVIDOR
+			if(sheetValues != null) {
+				if(sheetValues[0][0].equals(SAME_TW)) {
+					//UPDATE DO Tc
+					updateTTLs(sheetURL, range);
+					return cache.get(sheetURL).get(range);
+				}
+				else {
+					//GUARDA NOVOS VALORES EM CACHE
+					exec.execute(()-> {insertNewValuesInCache(sheetURL, range, sheetValues);});
+					//INSERE O NOVO TW-CLIENT
+					TWclient.put(sheetURL, sheetsM.getTWServer(sheetURL, SpreadsheetsServer.serverSecret));
+					//RETORNA OS NOVOS VALORES
+				}
+			}
+			else {
+				//VAI BUSCAR OS VALORES NAO VALIDOS
+				//SE HAVIA VALORES GUARDADOS EM CACHE
+				if(rangeStoredInCache)
+					return cache.get(sheetURL).get(range);
+				else
+					return null;
+			}
+		}
+		
+		return sheetValues;
+	}
+	
 }

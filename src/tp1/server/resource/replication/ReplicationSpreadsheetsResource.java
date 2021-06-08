@@ -1,6 +1,7 @@
 package tp1.server.resource.replication;
 
 import java.net.URI;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,10 +49,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 
 	private static final String REDIRECTING = "Request made to a secondary server. Redirecting...\n";
 	private static final String REDIRECTING_OUTDATED = "Request made to an outdated secondary server. Redirecting...\n";
-	private static final String UNRECOGNIZED_TASK = "Type of task not recognized" ;
+	private static final String UNRECOGNIZED_TASK = "Type of task not recognized";
 	private static final int TASK_TYPE_INDEX = 0;
 	private static final int TASK_JSON_INDEX = 1;
-
 
 	private final Map<String, Spreadsheet> spreadsheets;
 	private final Map<String, List<String>> owners;
@@ -231,7 +231,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			return sheet;
 		} else {
 			Log.info(REDIRECTING_OUTDATED);
-			exec.execute(() -> {checkForUpdates(localVersionNumber);});
+			exec.execute(() -> {
+				checkForUpdates(localVersionNumber);
+			});
 			UriBuilder uriB = UriBuilder.newInstance();
 			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId)
 					.queryParam("userId", userId).queryParam("password", password);
@@ -314,7 +316,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 					}
 
 					String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-							rangeStoredInCache, ReplicationSpreadsheetsServer.serverSecret);
+							rangeStoredInCache, null, ReplicationSpreadsheetsServer.serverSecret);
 
 					if (sheetValues != null) {
 
@@ -334,7 +336,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			return sheetValues;
 		} else {
 			Log.info(REDIRECTING_OUTDATED);
-			exec.execute(() -> {checkForUpdates(localVersionNumber);});
+			exec.execute(() -> {
+				checkForUpdates(localVersionNumber);
+			});
 			UriBuilder uriB = UriBuilder.newInstance();
 			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path("values")
 					.queryParam("userId", userId).queryParam("password", password);
@@ -517,7 +521,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret, Long version) { // OPERACAO
+	public String[][] importRange(String sheetId, String userId, String range, Timestamp twClient, String secret, Long version) { // OPERACAO
 																												// DE
 																												// LEITURA
 		if (replicationM.isPrimary(ReplicationSpreadsheetsServer.serverURL) || version == null
@@ -568,7 +572,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 									+ ReplicationSpreadsheetsServer.spreadsheetsDomain;
 
 							String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-									CLIENT_DEFAULT_RETRIES, ReplicationSpreadsheetsServer.serverSecret);
+									CLIENT_DEFAULT_RETRIES, null, ReplicationSpreadsheetsServer.serverSecret);
 
 							return sheetValues;
 						}
@@ -577,7 +581,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 			return cellR.extractRangeValuesFrom(rangeValues);
 		} else {
 			Log.info(REDIRECTING_OUTDATED);
-			exec.execute(() -> {checkForUpdates(localVersionNumber);});
+			exec.execute(() -> {
+				checkForUpdates(localVersionNumber);
+			});
 			UriBuilder uriB = UriBuilder.newInstance();
 			uriB.uri(replicationM.getPrimaryServerURL()).path(RestSpreadsheets.PATH).path(sheetId).path(userId)
 					.path(range).queryParam("secret", secret);
@@ -590,7 +596,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public String createSpreadsheetOperation(Spreadsheet sheet, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
-		
+
 		checkForUpdates(version);
 
 		replicationM.newTask(new CreateSpreadsheetTask(sheet));
@@ -627,9 +633,9 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 		checkReplicationSecret(repSecret);
 
 		checkForUpdates(version);
-		
+
 		Log.info("deleteSpreadsheetOperation : sheet = " + sheetId);
-		
+
 		replicationM.newTask(new DeleteSpreadsheetTask(sheetId));
 		spreadsheets.remove(sheetId);
 
@@ -640,7 +646,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	@Override
 	public void updateCellOperation(String sheetId, String cell, String rawValue, String repSecret, Long version) {
 		checkReplicationSecret(repSecret);
-		
+
 		checkForUpdates(version);
 
 		replicationM.newTask(new UpdateCellTask(sheetId, cell, rawValue));
@@ -842,7 +848,7 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 	synchronized private void checkForUpdates(Long receivedVersion) {
 		if (receivedVersion > localVersionNumber) {
 			List<String[]> missingTasks = replicationM.getMissingTasks(localVersionNumber.intValue());
-			
+
 			executeTasks(missingTasks.subList(0, missingTasks.size() - 1));
 		}
 	}
@@ -891,6 +897,12 @@ public class ReplicationSpreadsheetsResource implements ReplicationRestSpreadshe
 				break;
 			}
 		}
+	}
+
+	@Override
+	public Timestamp getTWServer(String sheetURL, String secret) {
+		Log.info("Not available");
+		return null;
 	}
 
 }

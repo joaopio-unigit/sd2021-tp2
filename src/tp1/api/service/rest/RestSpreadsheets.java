@@ -1,5 +1,7 @@
 package tp1.api.service.rest;
 
+import java.sql.Timestamp;
+
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -178,5 +180,18 @@ public interface RestSpreadsheets {
 	@GET
 	@Path("/{sheetId}/{userId}/{range}")
 	String[][] importRange(@PathParam("sheetId") String sheetId, @PathParam("userId") String userId,
-			@PathParam("range") String range, @QueryParam("secret") String secret, @HeaderParam(HEADER_VERSION) Long version);
+			@PathParam("range") String range,  @QueryParam("twclient") Timestamp twClient, @QueryParam("secret") String secret, @HeaderParam(HEADER_VERSION) Long version);
+	
+	/**
+	 * Return the calculated imported values in some range
+	 * 
+	 * @param sheetId - the sheet with the values we want
+	 * @param secret - secret stored by the servers that serves as authentication between servers
+	 * 
+	 * @return 200, in case of success.
+	 * 		   400, otherwise
+	 */
+	@GET
+	@Path("/{sheetURL}/cache")
+	Timestamp getTWServer(@PathParam("sheetURL") String sheetURL, @QueryParam("secret") String secret);
 }

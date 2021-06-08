@@ -1,6 +1,7 @@
 package tp1.server.resource.dropbox;
 
 import java.net.URI;
+import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -231,7 +232,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 				}
 
 				String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-						rangeStoredInCache, DropboxSpreadsheetsServer.serverSecret);
+						rangeStoredInCache, null, DropboxSpreadsheetsServer.serverSecret);
 
 				if (sheetValues != null) {
 
@@ -376,7 +377,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 	}
 
 	@Override
-	public String[][] importRange(String sheetId, String userId, String range, String secret, Long version) {
+	public String[][] importRange(String sheetId, String userId, String range, Timestamp twClient, String secret, Long version) {
 		Log.info("importRange : " + sheetId + "; userId = " + userId + "; range = " + range);
 
 		if(!secret.equals(DropboxSpreadsheetsServer.serverSecret))
@@ -420,7 +421,7 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 						String userIdDomain = sheet.getOwner() + "@" + DropboxSpreadsheetsServer.spreadsheetsDomain;
 
 						String[][] sheetValues = sheetsM.getSpreadsheetValues(sheetURL, userIdDomain, range,
-								CLIENT_DEFAULT_RETRIES, DropboxSpreadsheetsServer.serverSecret);
+								CLIENT_DEFAULT_RETRIES, null, DropboxSpreadsheetsServer.serverSecret);
 
 						return sheetValues;
 					}
@@ -502,6 +503,12 @@ public class DropboxSpreadsheetsResource implements RestSpreadsheets {
 			Log.info("SheetId invalid.");
 			throw new WebApplicationException(Status.NOT_FOUND);
 		}
+	}
+
+	@Override
+	public Timestamp getTWServer(String sheetURL, String secret) {
+		Log.info("Not available");
+		return null;
 	}
 
 }
